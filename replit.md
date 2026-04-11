@@ -1,8 +1,38 @@
-# Workspace
+# VisionBridge UG — TeleOphthalmology Platform
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+Clinical-grade teleophthalmology mobile application built for low-resource settings (Uganda / Sub-Saharan Africa). Designed for community health workers, technicians, and ophthalmologists to manage retinal screening, AI-assisted diagnosis, and specialist consultations.
+
+## Architecture
+
+### Mobile App (Expo / React Native)
+- **Location**: `artifacts/visionbridge/`
+- **Framework**: Expo SDK with Expo Router (file-based routing)
+- **State**: React Context (`context/AppContext.tsx`) + AsyncStorage for offline persistence
+- **No authentication** (skipped for rapid iteration)
+
+### API Server (Express 5)
+- **Location**: `artifacts/api-server/`
+- **Framework**: Express 5 + TypeScript
+- **Not currently used** by mobile app (offline-first approach)
+
+## Core Features
+
+1. **Dashboard** — Live stats: today's screenings, pending reviews, urgent cases, open consultations
+2. **Patient Registry** — Register patients with demographics, medical history, village/district
+3. **Retinal Screening** — Capture workflow with simulated AI analysis (EfficientNet-B4 model proxy)
+4. **AI Results** — Risk levels: Normal / Mild / Moderate / Severe / Urgent with findings and confidence
+5. **Consultation Queue** — CHW-to-specialist referral management with priority triage
+6. **Notifications** — Real-time alerts for consultation responses, screening reviews, referrals
+7. **Patient Detail** — Full history, screening timeline, medical records
+
+## Clinical Design Principles
+
+- AI results include HIPAA-grade disclaimer (clinical decision support, not diagnosis)
+- Priority triage: Emergency / Urgent / Routine
+- Offline-first: AsyncStorage used for persistence, sync banner shows connectivity status
+- Risk color coding: Normal=green, Mild=cyan, Moderate=amber, Severe/Urgent=red
 
 ## Stack
 
@@ -10,18 +40,30 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **Mobile**: Expo + Expo Router + React Native
+- **State**: React Context + AsyncStorage
+- **API framework**: Express 5 (backend, unused by mobile initially)
+- **Database**: PostgreSQL + Drizzle ORM (available, not connected to mobile yet)
+- **Validation**: Zod, drizzle-zod
 
 ## Key Commands
 
-- `pnpm run typecheck` — full typecheck across all packages
+- `pnpm run typecheck` — full typecheck
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
+- Expo workflow: restart `artifacts/visionbridge: expo`
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+## Demo Data
+
+Pre-seeded with 5 patients (Mbarara district), 5 screenings with AI results, 3 consultations, and 4 notifications. All data is stored in AsyncStorage and persists across sessions.
+
+## Screen Routes
+
+- `/(tabs)/index` — Dashboard
+- `/(tabs)/patients` — Patient list with search/filter
+- `/(tabs)/consultations` — Consultation queue with status filters
+- `/(tabs)/notifications` — Notification center
+- `/patient/register` — New patient registration (modal)
+- `/patient/[id]` — Patient detail
+- `/screening/new` — New screening workflow (modal)
+- `/screening/[id]` — Screening detail with referral flow
+- `/consultation/[id]` — Consultation detail with specialist response

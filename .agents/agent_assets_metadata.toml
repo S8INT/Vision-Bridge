@@ -1,0 +1,14 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "oY1sj6abYtepRqjKKLuTZ"
+uri = "file://artifacts/visionbridge/assets/images/icon.png"
+type = "image"
+title = "visionbridge_app_icon"
+
+[[generated]]
+id = "0uW1Sj2lRkwwZYxasqwdJ"
+uri = "file://artifacts/visionbridge/assets/images/retina_placeholder.png"
+type = "image"
+title = "retina_fundus_placeholder"

@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/"
+title = "VisionBridge"
+version = "1.0.0"
+id = "artifacts/visionbridge"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/" ]
+localPort = 24514
+
+[services.development]
+run = "pnpm --filter @workspace/visionbridge run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/visionbridge", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/visionbridge", "run", "serve" ]
+
+[services.env]
+PORT = "24514"
+BASE_PATH = "/"
