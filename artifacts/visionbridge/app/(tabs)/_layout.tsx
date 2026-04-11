@@ -25,6 +25,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
         <Label>Consults</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="campaigns">
+        <Icon sf={{ default: "map", selected: "map.fill" }} />
+        <Label>Campaigns</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="notifications">
         <Icon sf={{ default: "bell", selected: "bell.fill" }} />
         <Label>Alerts</Label>
@@ -102,6 +106,18 @@ function ClassicTabLayout() {
               <SymbolView name="message.circle" tintColor={color} size={24} />
             ) : (
               <Feather name="message-circle" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="campaigns"
+        options={{
+          title: "Campaigns",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="map" tintColor={color} size={24} />
+            ) : (
+              <Feather name="map-pin" size={22} color={color} />
             ),
         }}
       />
