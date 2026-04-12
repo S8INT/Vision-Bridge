@@ -44,6 +44,30 @@ function RootLayoutNav() {
         name="consultation/[id]"
         options={{ title: "Consultation" }}
       />
+      <Stack.Screen
+        name="referral/new"
+        options={{ title: "Create Referral", presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="referral/[id]"
+        options={{ title: "Referral" }}
+      />
+      <Stack.Screen
+        name="appointment/book"
+        options={{ title: "Book Appointment", presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="appointment/[id]"
+        options={{ title: "Appointment" }}
+      />
+      <Stack.Screen
+        name="campaign/new"
+        options={{ title: "New Campaign", presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="campaign/[id]"
+        options={{ title: "Campaign" }}
+      />
     </Stack>
   );
 }

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Clinical-grade teleophthalmology mobile application built for low-resource settings (Uganda / Sub-Saharan Africa). Designed for community health workers, technicians, and ophthalmologists to manage retinal screening, AI-assisted diagnosis, and specialist consultations.
+Clinical-grade teleophthalmology mobile application built for low-resource settings (Uganda / Sub-Saharan Africa). Designed for community health workers, technicians, and ophthalmologists to manage retinal screening, AI-assisted diagnosis, specialist consultations, referrals, appointments, and district-wide campaigns.
 
 ## Architecture
 
@@ -10,28 +10,48 @@ Clinical-grade teleophthalmology mobile application built for low-resource setti
 - **Location**: `artifacts/visionbridge/`
 - **Framework**: Expo SDK with Expo Router (file-based routing)
 - **State**: React Context (`context/AppContext.tsx`) + AsyncStorage for offline persistence
-- **No authentication** (skipped for rapid iteration)
+- **No authentication** — demo user: Sarah Nakato (Technician, Mbarara RRH Eye Unit)
+- **Offline-first**: All actions queue to AsyncStorage; upload queue retried when connectivity returns
 
 ### API Server (Express 5)
 - **Location**: `artifacts/api-server/`
 - **Framework**: Express 5 + TypeScript
-- **Not currently used** by mobile app (offline-first approach)
+- **Imaging service**: `routes/imaging.ts` — upload, quality scoring, thumbnail, DICOM, offline queue endpoints
+- **Image processing**: `lib/imageProcessor.ts` — EXIF strip, compression, blur/brightness/FOV scoring, thumbnail gen, DICOM wrapper
+- **Object storage**: `lib/minio.ts` — per-tenant encrypted buckets, graceful fallback to local in-memory store
 
 ## Core Features
 
-1. **Dashboard** — Live stats: today's screenings, pending reviews, urgent cases, open consultations
-2. **Patient Registry** — Register patients with demographics, medical history, village/district
-3. **Retinal Screening** — Capture workflow with simulated AI analysis (EfficientNet-B4 model proxy)
-4. **AI Results** — Risk levels: Normal / Mild / Moderate / Severe / Urgent with findings and confidence
-5. **Consultation Queue** — CHW-to-specialist referral management with priority triage
-6. **Notifications** — Real-time alerts for consultation responses, screening reviews, referrals
-7. **Patient Detail** — Full history, screening timeline, medical records
+### Consultation Workflow (7 responsibilities)
+1. Doctor assignment (round-robin, manual override)
+2. Clinical notes / diagnosis / treatment plan
+3. Referral tracking (internal + external)
+4. Appointment marketplace (create, book, manage)
+5. Care coordination status (Pending → Assigned → InReview → Reviewed → Referred → Completed)
+6. Campaign bulk mode (link screenings/consultations to campaigns)
+7. Response + notifications
+
+### Imaging Service (7 responsibilities)
+1. Upload JPEG/PNG (camera or gallery, expo-image-picker)
+2. Client-side quality pre-score (blur/brightness/FOV, before upload)
+3. Server-side quality scoring (sharp — blur/brightness/FOV/contrast)
+4. EXIF strip + clinical metadata injection (patientId, deviceId, captureTime, eye, tenantId)
+5. MinIO encrypted per-tenant buckets (env-configurable, in-memory fallback)
+6. Thumbnail generation (server-side, bandwidth-efficient viewing)
+7. DICOM export wrapper (OP modality, future compliance)
+8. Offline upload queue (AsyncStorage-backed, up to 5 retries, bulk processQueue)
+
+### Additional Screens
+- Referral management (create, view, status tracking)
+- Appointment booking (marketplace, specialist availability)
+- Campaign management (district-wide bulk screening programs)
+- Campaigns tab (overview + stats)
 
 ## Clinical Design Principles
 
-- AI results include HIPAA-grade disclaimer (clinical decision support, not diagnosis)
+- AI results carry HIPAA disclaimer (clinical decision support, not diagnosis)
 - Priority triage: Emergency / Urgent / Routine
-- Offline-first: AsyncStorage used for persistence, sync banner shows connectivity status
+- Offline-first: AsyncStorage for persistence, connectivity banner
 - Risk color coding: Normal=green, Mild=cyan, Moderate=amber, Severe/Urgent=red
 
 ## Stack
@@ -42,28 +62,60 @@ Clinical-grade teleophthalmology mobile application built for low-resource setti
 - **TypeScript version**: 5.9
 - **Mobile**: Expo + Expo Router + React Native
 - **State**: React Context + AsyncStorage
-- **API framework**: Express 5 (backend, unused by mobile initially)
-- **Database**: PostgreSQL + Drizzle ORM (available, not connected to mobile yet)
-- **Validation**: Zod, drizzle-zod
+- **API framework**: Express 5
+- **Image processing**: sharp (server-side), expo-image-picker (mobile)
+- **Object storage**: MinIO (per-tenant encrypted buckets)
+
+## Metro Configuration
+
+`artifacts/visionbridge/metro.config.js` contains `resolver.blockList` entries to exclude:
+- `node_modules/@img/` (sharp native libvips binaries)
+- `node_modules/sharp/`
+- `node_modules/minio/`
+- `artifacts/api-server/` directory
+
+This prevents Metro from crashing on sharp's temp libvips directory in the monorepo.
 
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck
 - `pnpm run build` — typecheck + build all packages
 - Expo workflow: restart `artifacts/visionbridge: expo`
+- API server workflow: restart `artifacts/api-server: API Server`
+
+## Environment Variables (API Server)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MINIO_ENDPOINT` | — | MinIO/S3 server hostname |
+| `MINIO_ACCESS_KEY` | — | MinIO access key |
+| `MINIO_SECRET_KEY` | — | MinIO secret key |
+| `MINIO_PORT` | 9000 | MinIO port |
+| `MINIO_USE_SSL` | false | TLS |
+| `MINIO_REGION` | us-east-1 | Bucket region |
+| `MINIO_BUCKET_PREFIX` | visionbridge | Per-tenant bucket prefix |
+
+If MinIO is not configured, the imaging service falls back to in-memory local storage (development only).
 
 ## Demo Data
 
-Pre-seeded with 5 patients (Mbarara district), 5 screenings with AI results, 3 consultations, and 4 notifications. All data is stored in AsyncStorage and persists across sessions.
+Pre-seeded with 7 patients (Mbarara district), 7 screenings with AI results, 3 consultations, 4 doctors (round-robin assignment), 1 referral, 1 appointment, 2 campaigns. All stored in AsyncStorage key `visionbridge_v2`.
 
 ## Screen Routes
 
 - `/(tabs)/index` — Dashboard
 - `/(tabs)/patients` — Patient list with search/filter
 - `/(tabs)/consultations` — Consultation queue with status filters
-- `/(tabs)/notifications` — Notification center
+- `/(tabs)/campaigns` — Campaign overview
+- `/(tabs)/notifications` — Notification center with badge
 - `/patient/register` — New patient registration (modal)
-- `/patient/[id]` — Patient detail
-- `/screening/new` — New screening workflow (modal)
-- `/screening/[id]` — Screening detail with referral flow
-- `/consultation/[id]` — Consultation detail with specialist response
+- `/patient/[id]` — Patient detail + screening history
+- `/screening/new` — Full imaging pipeline (capture → quality → upload → AI analysis → result)
+- `/screening/[id]` — Screening detail
+- `/consultation/[id]` — Consultation with doctor assignment, referral/appointment linking
+- `/referral/new` — Create referral (modal)
+- `/referral/[id]` — Referral detail + status
+- `/appointment/book` — Book appointment (modal)
+- `/appointment/[id]` — Appointment detail
+- `/campaign/new` — Create campaign (modal)
+- `/campaign/[id]` — Campaign detail + progress
