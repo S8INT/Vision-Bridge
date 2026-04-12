@@ -25,6 +25,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
         <Label>Consults</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="analytics">
+        <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
+        <Label>Analytics</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="campaigns">
         <Icon sf={{ default: "map", selected: "map.fill" }} />
         <Label>Campaigns</Label>
