@@ -1,11 +1,3 @@
-/**
- * VisionBridge Login Screen
- *
- * Handles email + password authentication.
- * Redirects to MFA screen if MFA is required.
- * Includes DPPA consent notice (Uganda Data Protection and Privacy Act 2019).
- */
-
 import React, { useState } from "react";
 import {
   View,
@@ -17,12 +9,19 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+
+const DEMO_ACCOUNTS = [
+  { label: "Admin", email: "admin@visionbridge.ug", password: "Admin1234!" },
+  { label: "Doctor", email: "dr.okello@visionbridge.ug", password: "Doctor1234!" },
+  { label: "Technician", email: "sarah.nakato@visionbridge.ug", password: "Tech1234!" },
+  { label: "CHW", email: "chw.mbarara@visionbridge.ug", password: "CHW1234!" },
+  { label: "Viewer", email: "viewer@visionbridge.ug", password: "Viewer1234!" },
+];
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -31,31 +30,21 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  const DEMO_ACCOUNTS = [
-    { label: "Admin", email: "admin@visionbridge.ug", password: "Admin1234!" },
-    { label: "Doctor", email: "dr.okello@visionbridge.ug", password: "Doctor1234!" },
-    { label: "Technician", email: "sarah.nakato@visionbridge.ug", password: "Tech1234!" },
-    { label: "CHW", email: "chw.mbarara@visionbridge.ug", password: "CHW1234!" },
-  ];
-
-  async function handleLogin() {
-    if (!email.trim() || !password.trim()) {
-      setError("Please enter your email and password.");
-      return;
-    }
-
+  async function doLogin(emailVal: string, passwordVal: string) {
     setLoading(true);
     setError(null);
 
-    const result = await login(email.trim(), password, {
+    const result = await login(emailVal.trim(), passwordVal, {
       deviceName: "VisionBridge Mobile",
       devicePlatform: Platform.OS,
     });
 
     setLoading(false);
+    setLoadingLabel(null);
 
     if (!result.success) {
       setError(result.error);
@@ -70,211 +59,132 @@ export default function LoginScreen() {
     router.replace("/(tabs)");
   }
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    scroll: {
-      flexGrow: 1,
-      justifyContent: "center",
-      paddingHorizontal: 24,
-      paddingVertical: 48,
-    },
-    logo: {
-      alignItems: "center",
-      marginBottom: 40,
-    },
+  async function handleLogin() {
+    if (!email.trim() || !password.trim()) {
+      setError("Please enter your email and password.");
+      return;
+    }
+    await doLogin(email, password);
+  }
+
+  async function handleDemoLogin(account: (typeof DEMO_ACCOUNTS)[number]) {
+    setEmail(account.email);
+    setPassword(account.password);
+    setLoadingLabel(account.label);
+    setError(null);
+    await doLogin(account.email, account.password);
+  }
+
+  const s = StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    scroll: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 24, paddingVertical: 48 },
+    logo: { alignItems: "center", marginBottom: 40 },
     logoIcon: {
-      width: 64,
-      height: 64,
-      borderRadius: 16,
+      width: 68, height: 68, borderRadius: 18,
       backgroundColor: colors.primary,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: 16,
+      alignItems: "center", justifyContent: "center", marginBottom: 16,
     },
-    logoIconText: {
-      fontSize: 28,
-      fontFamily: "Inter_700Bold",
-      color: "#fff",
-    },
-    appName: {
-      fontSize: 24,
-      fontFamily: "Inter_700Bold",
-      color: colors.text,
-      letterSpacing: -0.5,
-    },
-    tagline: {
-      fontSize: 13,
-      fontFamily: "Inter_400Regular",
-      color: colors.mutedForeground,
-      marginTop: 4,
-    },
+    logoIconText: { fontSize: 30, color: "#fff" },
+    appName: { fontSize: 26, fontFamily: "Inter_700Bold", color: colors.text, letterSpacing: -0.5 },
+    tagline: { fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 4 },
     card: {
-      backgroundColor: colors.card,
-      borderRadius: colors.radius,
-      padding: 24,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      elevation: 3,
+      backgroundColor: colors.card, borderRadius: colors.radius, padding: 24,
+      shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
     },
-    title: {
-      fontSize: 20,
-      fontFamily: "Inter_600SemiBold",
-      color: colors.text,
-      marginBottom: 4,
-    },
-    subtitle: {
-      fontSize: 13,
-      fontFamily: "Inter_400Regular",
-      color: colors.mutedForeground,
-      marginBottom: 24,
-    },
-    label: {
-      fontSize: 13,
-      fontFamily: "Inter_500Medium",
-      color: colors.text,
-      marginBottom: 6,
-    },
+    title: { fontSize: 20, fontFamily: "Inter_600SemiBold", color: colors.text, marginBottom: 4 },
+    subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginBottom: 24 },
+    label: { fontSize: 13, fontFamily: "Inter_500Medium", color: colors.text, marginBottom: 6 },
     input: {
-      height: 46,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      fontSize: 15,
-      fontFamily: "Inter_400Regular",
-      color: colors.text,
-      backgroundColor: colors.muted,
-      marginBottom: 16,
+      height: 46, borderWidth: 1, borderColor: colors.border, borderRadius: 10,
+      paddingHorizontal: 14, fontSize: 15, fontFamily: "Inter_400Regular",
+      color: colors.text, backgroundColor: colors.muted, marginBottom: 16,
     },
     passwordWrapper: {
-      flexDirection: "row",
-      alignItems: "center",
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 10,
-      backgroundColor: colors.muted,
-      marginBottom: 20,
+      flexDirection: "row", alignItems: "center", borderWidth: 1,
+      borderColor: colors.border, borderRadius: 10,
+      backgroundColor: colors.muted, marginBottom: 20,
     },
     passwordInput: {
-      flex: 1,
-      height: 46,
-      paddingHorizontal: 14,
-      fontSize: 15,
-      fontFamily: "Inter_400Regular",
-      color: colors.text,
+      flex: 1, height: 46, paddingHorizontal: 14,
+      fontSize: 15, fontFamily: "Inter_400Regular", color: colors.text,
     },
-    passwordToggle: {
-      paddingHorizontal: 14,
-    },
-    passwordToggleText: {
-      fontSize: 12,
-      fontFamily: "Inter_500Medium",
-      color: colors.primary,
-    },
+    eyeBtn: { paddingHorizontal: 14 },
+    eyeText: { fontSize: 12, fontFamily: "Inter_500Medium", color: colors.primary },
     errorBox: {
-      backgroundColor: colors.urgentBg,
-      borderWidth: 1,
-      borderColor: colors.urgentBorder,
-      borderRadius: 8,
-      padding: 12,
-      marginBottom: 16,
+      backgroundColor: colors.urgentBg, borderWidth: 1, borderColor: colors.urgentBorder,
+      borderRadius: 8, padding: 12, marginBottom: 16,
     },
-    errorText: {
-      fontSize: 13,
-      fontFamily: "Inter_400Regular",
-      color: colors.urgentText,
-    },
+    errorText: { fontSize: 13, fontFamily: "Inter_400Regular", color: colors.urgentText },
     loginBtn: {
-      height: 48,
-      backgroundColor: colors.primary,
-      borderRadius: 10,
-      alignItems: "center",
-      justifyContent: "center",
+      height: 48, backgroundColor: colors.primary, borderRadius: 10,
+      alignItems: "center", justifyContent: "center",
     },
-    loginBtnDisabled: {
-      opacity: 0.6,
-    },
-    loginBtnText: {
-      fontSize: 15,
-      fontFamily: "Inter_600SemiBold",
-      color: "#fff",
-    },
-    dppaNotice: {
-      marginTop: 20,
-      padding: 12,
-      backgroundColor: colors.muted,
-      borderRadius: 8,
-    },
-    dppaText: {
-      fontSize: 11,
-      fontFamily: "Inter_400Regular",
-      color: colors.mutedForeground,
-      lineHeight: 16,
-    },
-    demoSection: {
-      marginTop: 24,
-    },
+    loginBtnDisabled: { opacity: 0.6 },
+    loginBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#fff" },
+    dppaNotice: { marginTop: 20, padding: 12, backgroundColor: colors.muted, borderRadius: 8 },
+    dppaText: { fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground, lineHeight: 16 },
+    demoSection: { marginTop: 28 },
     demoTitle: {
-      fontSize: 12,
-      fontFamily: "Inter_500Medium",
-      color: colors.mutedForeground,
-      textAlign: "center",
-      marginBottom: 12,
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
+      fontSize: 11, fontFamily: "Inter_500Medium", color: colors.mutedForeground,
+      textAlign: "center", marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.8,
     },
-    demoRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      justifyContent: "center",
-    },
+    demoRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
     demoBtn: {
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-      backgroundColor: colors.secondary,
-      borderRadius: 8,
+      paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20,
+      borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card,
+      flexDirection: "row", alignItems: "center", gap: 6,
+      minWidth: 90, justifyContent: "center",
     },
-    demoBtnText: {
-      fontSize: 12,
-      fontFamily: "Inter_500Medium",
-      color: colors.secondaryForeground,
+    demoBtnActive: { borderColor: colors.primary, backgroundColor: colors.secondary },
+    demoBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.text },
+    demoBtnTextActive: { color: colors.primary },
+    demoBtnBadge: {
+      width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary,
     },
+    roleChip: {
+      paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
+      backgroundColor: colors.muted,
+    },
+    roleChipText: { fontSize: 10, fontFamily: "Inter_500Medium", color: colors.mutedForeground },
   });
+
+  const ROLE_COLORS: Record<string, string> = {
+    Admin: "#7c3aed",
+    Doctor: "#0ea5e9",
+    Technician: "#10b981",
+    CHW: "#f59e0b",
+    Viewer: "#64748b",
+  };
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={s.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <View style={styles.logo}>
-          <View style={styles.logoIcon}>
-            <Text style={styles.logoIconText}>👁</Text>
+      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+        <View style={s.logo}>
+          <View style={s.logoIcon}>
+            <Text style={s.logoIconText}>👁</Text>
           </View>
-          <Text style={styles.appName}>VisionBridge</Text>
-          <Text style={styles.tagline}>TeleOphthalmology Platform · Uganda</Text>
+          <Text style={s.appName}>VisionBridge</Text>
+          <Text style={s.tagline}>TeleOphthalmology Platform · Uganda</Text>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.title}>Sign in</Text>
-          <Text style={styles.subtitle}>Access the clinical screening platform</Text>
+        <View style={s.card}>
+          <Text style={s.title}>Sign in</Text>
+          <Text style={s.subtitle}>Access the clinical screening platform</Text>
 
-          {error && (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error}</Text>
+          {error ? (
+            <View style={s.errorBox}>
+              <Text style={s.errorText}>{error}</Text>
             </View>
-          )}
+          ) : null}
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={s.label}>Email</Text>
           <TextInput
-            style={styles.input}
+            style={s.input}
             value={email}
             onChangeText={setEmail}
             placeholder="you@visionbridge.ug"
@@ -286,10 +196,10 @@ export default function LoginScreen() {
             editable={!loading}
           />
 
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.passwordWrapper}>
+          <Text style={s.label}>Password</Text>
+          <View style={s.passwordWrapper}>
             <TextInput
-              style={styles.passwordInput}
+              style={s.passwordInput}
               value={password}
               onChangeText={setPassword}
               placeholder="••••••••"
@@ -300,48 +210,56 @@ export default function LoginScreen() {
               onSubmitEditing={handleLogin}
               editable={!loading}
             />
-            <TouchableOpacity
-              style={styles.passwordToggle}
-              onPress={() => setShowPassword((v) => !v)}
-            >
-              <Text style={styles.passwordToggleText}>{showPassword ? "Hide" : "Show"}</Text>
+            <TouchableOpacity style={s.eyeBtn} onPress={() => setShowPassword((v) => !v)}>
+              <Text style={s.eyeText}>{showPassword ? "Hide" : "Show"}</Text>
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity
-            style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
+            style={[s.loginBtn, loading && s.loginBtnDisabled]}
             onPress={handleLogin}
             disabled={loading}
           >
-            {loading ? (
+            {loading && !loadingLabel ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.loginBtnText}>Sign in</Text>
+              <Text style={s.loginBtnText}>Sign in</Text>
             )}
           </TouchableOpacity>
 
-          <View style={styles.dppaNotice}>
-            <Text style={styles.dppaText}>
-              By signing in you consent to the processing of health data under the Uganda Data Protection and Privacy Act 2019 (DPPA). Data is processed only for clinical screening and referral purposes.
+          <View style={s.dppaNotice}>
+            <Text style={s.dppaText}>
+              By signing in you consent to processing of health data under the Uganda Data Protection and Privacy Act 2019 (DPPA). Data is processed only for clinical screening and referral purposes.
             </Text>
           </View>
         </View>
 
-        <View style={styles.demoSection}>
-          <Text style={styles.demoTitle}>Demo accounts</Text>
-          <View style={styles.demoRow}>
-            {DEMO_ACCOUNTS.map((account) => (
-              <TouchableOpacity
-                key={account.label}
-                style={styles.demoBtn}
-                onPress={() => {
-                  setEmail(account.email);
-                  setPassword(account.password);
-                }}
-              >
-                <Text style={styles.demoBtnText}>{account.label}</Text>
-              </TouchableOpacity>
-            ))}
+        {/* Demo accounts — each logs in directly with its own role */}
+        <View style={s.demoSection}>
+          <Text style={s.demoTitle}>Quick sign-in — demo accounts</Text>
+          <View style={s.demoRow}>
+            {DEMO_ACCOUNTS.map((account) => {
+              const isActive = loadingLabel === account.label;
+              const roleColor = ROLE_COLORS[account.label] ?? colors.primary;
+              return (
+                <TouchableOpacity
+                  key={account.label}
+                  style={[s.demoBtn, isActive && s.demoBtnActive]}
+                  onPress={() => handleDemoLogin(account)}
+                  disabled={loading}
+                  activeOpacity={0.75}
+                >
+                  {isActive ? (
+                    <ActivityIndicator size="small" color={roleColor} />
+                  ) : (
+                    <View style={[s.demoBtnBadge, { backgroundColor: roleColor }]} />
+                  )}
+                  <Text style={[s.demoBtnText, isActive && s.demoBtnTextActive]}>
+                    {account.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       </ScrollView>

@@ -9,38 +9,71 @@ import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import { useApp } from "@/context/AppContext";
+import { useAuth, type UserRole } from "@/context/AuthContext";
 
+// ── Per-role tab visibility ───────────────────────────────────────────────────
+// Based on 5.3 RBAC Permission Matrix (VisionBridge UG v1.0)
+const TAB_VISIBILITY: Record<UserRole, Record<string, boolean>> = {
+  Admin:      { index: true, patients: true, consultations: true, analytics: true, campaigns: true, notifications: true },
+  Doctor:     { index: true, patients: true, consultations: true, analytics: true, campaigns: false, notifications: true },
+  Technician: { index: true, patients: true, consultations: false, analytics: false, campaigns: true, notifications: true },
+  CHW:        { index: true, patients: true, consultations: false, analytics: false, campaigns: true, notifications: false },
+  Viewer:     { index: true, patients: false, consultations: false, analytics: true, campaigns: false, notifications: false },
+};
+
+function useTabVisible(tabName: string): boolean {
+  const { user } = useAuth();
+  const role: UserRole = user?.role ?? "Viewer";
+  return TAB_VISIBILITY[role]?.[tabName] ?? false;
+}
+
+// ── Native (iOS Liquid Glass) Layout ─────────────────────────────────────────
 function NativeTabLayout() {
+  const { user } = useAuth();
+  const role: UserRole = user?.role ?? "Viewer";
+  const vis = TAB_VISIBILITY[role] ?? {};
+
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
         <Icon sf={{ default: "house", selected: "house.fill" }} />
         <Label>Dashboard</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="patients">
-        <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
-        <Label>Patients</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="consultations">
-        <Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
-        <Label>Consults</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="analytics">
-        <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
-        <Label>Analytics</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="campaigns">
-        <Icon sf={{ default: "map", selected: "map.fill" }} />
-        <Label>Campaigns</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="notifications">
-        <Icon sf={{ default: "bell", selected: "bell.fill" }} />
-        <Label>Alerts</Label>
-      </NativeTabs.Trigger>
+      {vis.patients && (
+        <NativeTabs.Trigger name="patients">
+          <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
+          <Label>Patients</Label>
+        </NativeTabs.Trigger>
+      )}
+      {vis.consultations && (
+        <NativeTabs.Trigger name="consultations">
+          <Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
+          <Label>Consults</Label>
+        </NativeTabs.Trigger>
+      )}
+      {vis.analytics && (
+        <NativeTabs.Trigger name="analytics">
+          <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
+          <Label>Analytics</Label>
+        </NativeTabs.Trigger>
+      )}
+      {vis.campaigns && (
+        <NativeTabs.Trigger name="campaigns">
+          <Icon sf={{ default: "map", selected: "map.fill" }} />
+          <Label>Campaigns</Label>
+        </NativeTabs.Trigger>
+      )}
+      {vis.notifications && (
+        <NativeTabs.Trigger name="notifications">
+          <Icon sf={{ default: "bell", selected: "bell.fill" }} />
+          <Label>Alerts</Label>
+        </NativeTabs.Trigger>
+      )}
     </NativeTabs>
   );
 }
 
+// ── Classic (cross-platform) Layout ──────────────────────────────────────────
 function ClassicTabLayout() {
   const colors = useColors();
   const colorScheme = useColorScheme();
@@ -48,6 +81,14 @@ function ClassicTabLayout() {
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
   const { unreadCount } = useApp();
+
+  const showPatients      = useTabVisible("patients");
+  const showConsultations = useTabVisible("consultations");
+  const showAnalytics     = useTabVisible("analytics");
+  const showCampaigns     = useTabVisible("campaigns");
+  const showNotifications = useTabVisible("notifications");
+
+  const hide = { tabBarButton: () => null } as const;
 
   return (
     <Tabs
@@ -65,15 +106,9 @@ function ClassicTabLayout() {
         },
         tabBarBackground: () =>
           isIOS ? (
-            <BlurView
-              intensity={100}
-              tint={isDark ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
-            />
+            <BlurView intensity={100} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
           ) : isWeb ? (
-            <View
-              style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]}
-            />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
           ) : null,
       }}
     >
@@ -82,60 +117,53 @@ function ClassicTabLayout() {
         options={{
           title: "Dashboard",
           tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="house" tintColor={color} size={24} />
-            ) : (
-              <Feather name="home" size={22} color={color} />
-            ),
+            isIOS ? <SymbolView name="house" tintColor={color} size={24} /> : <Feather name="home" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="patients"
         options={{
           title: "Patients",
+          ...(showPatients ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="person.2" tintColor={color} size={24} />
-            ) : (
-              <Feather name="users" size={22} color={color} />
-            ),
+            isIOS ? <SymbolView name="person.2" tintColor={color} size={24} /> : <Feather name="users" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="consultations"
         options={{
           title: "Consults",
+          ...(showConsultations ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="message.circle" tintColor={color} size={24} />
-            ) : (
-              <Feather name="message-circle" size={22} color={color} />
-            ),
+            isIOS ? <SymbolView name="message.circle" tintColor={color} size={24} /> : <Feather name="message-circle" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="analytics"
+        options={{
+          title: "Analytics",
+          ...(showAnalytics ? {} : hide),
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="chart.bar" tintColor={color} size={24} /> : <Feather name="bar-chart-2" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="campaigns"
         options={{
           title: "Campaigns",
+          ...(showCampaigns ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="map" tintColor={color} size={24} />
-            ) : (
-              <Feather name="map-pin" size={22} color={color} />
-            ),
+            isIOS ? <SymbolView name="map" tintColor={color} size={24} /> : <Feather name="map-pin" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="notifications"
         options={{
           title: "Alerts",
+          ...(showNotifications ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="bell" tintColor={color} size={24} />
-            ) : (
-              <Feather name="bell" size={22} color={color} />
-            ),
-          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+            isIOS ? <SymbolView name="bell" tintColor={color} size={24} /> : <Feather name="bell" size={22} color={color} />,
+          tabBarBadge: showNotifications && unreadCount > 0 ? unreadCount : undefined,
         }}
       />
     </Tabs>
@@ -143,8 +171,6 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
+  if (isLiquidGlassAvailable()) return <NativeTabLayout />;
   return <ClassicTabLayout />;
 }
