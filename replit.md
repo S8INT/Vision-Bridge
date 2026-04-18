@@ -54,6 +54,71 @@ Clinical-grade teleophthalmology mobile application built for low-resource setti
 - Offline-first: AsyncStorage for persistence, connectivity banner
 - Risk color coding: Normal=green, Mild=cyan, Moderate=amber, Severe/Urgent=red
 
+## Auth Service
+
+### Backend (`artifacts/api-server/src/routes/auth.ts` + `lib/`)
+JWT/OAuth2 token issuance (15-min access, 7-day refresh) via `jsonwebtoken`.
+TOTP MFA (RFC 6238) via `otpauth`. Password hashing via `bcryptjs`.
+
+**Auth routes** (all at `/api/auth/`):
+- `POST /login` — email/password → access + refresh tokens; triggers MFA challenge if enabled
+- `POST /refresh` — refresh token → new access token
+- `POST /logout` — revoke session (`?all=true` to revoke all)
+- `GET /me` — current user profile + permissions map
+- `POST /mfa/setup` — initiate TOTP setup (returns secret + otpauthUrl)
+- `POST /mfa/confirm` — confirm TOTP code → activates MFA
+- `POST /mfa/verify` — verify TOTP during login (for MFA-enabled accounts)
+- `POST /mfa/disable` — disable MFA with current TOTP code
+- `GET /sessions` — list active sessions/devices
+- `DELETE /sessions/:id` — revoke specific session
+- `GET /audit-log` — admin: full tenant log; others: own events
+- `GET /users` — list tenant users (Admin only)
+- `POST /users` — create user (Admin only)
+- `PATCH /users/:id/status` — activate/deactivate user (Admin only)
+- `POST /dppa/consent` — record DPPA consent
+- `GET /dppa/my-data` — personal data export (DPPA right of access)
+
+**Middleware**:
+- `requireAuth` — verifies Bearer JWT, attaches `req.auth` (sub, role, tenantId, sessionId)
+- `requireRole(resource, action)` — RBAC enforcement per RBAC permission matrix
+
+**RBAC matrix** (5.3 from VisionBridge UG v1.0):
+
+| Resource | Admin | Doctor | Technician | CHW | Viewer |
+|---|---|---|---|---|---|
+| patient | full | create/read/update | create/read/update | create/read | read |
+| image | full | upload/view | upload/view | upload | view |
+| aiResults | view | view | view | view (urgency) | view |
+| consultation | full | read/diagnose | read | — | — |
+| referral | full | issue/read | read | — | — |
+| billing | manage | — | — | — | — |
+| analytics | view | view (clinical) | view (own) | — | view (aggregate) |
+| models | deploy | — | — | — | — |
+| tenantConfig | configure | — | — | — | — |
+| users | full | — | — | — | — |
+
+**Demo users** (all in tenant `Mbarara RRH Eye Unit`):
+- `admin@visionbridge.ug` / `Admin1234!` — Admin
+- `dr.okello@visionbridge.ug` / `Doctor1234!` — Doctor (MFA-ready)
+- `sarah.nakato@visionbridge.ug` / `Tech1234!` — Technician
+- `chw.mbarara@visionbridge.ug` / `CHW1234!` — CHW
+- `viewer@visionbridge.ug` / `Viewer1234!` — Viewer
+
+### Mobile (`artifacts/visionbridge/`)
+- `context/AuthContext.tsx` — JWT token lifecycle, SecureStore persistence, auto-refresh
+- `app/login.tsx` — login screen with DPPA consent notice and demo account quickfill
+- `app/mfa.tsx` — 6-digit TOTP entry with auto-verify on completion
+- `app/_layout.tsx` — AuthGuard redirects unauthenticated users to `/login`
+
+### Storage
+Auth state is in-memory (survives process lifetime). For production persistence, provision a PostgreSQL DB — the schema is defined in `lib/db/src/schema/auth.ts` (tenants, users, sessions, audit_log tables).
+
+### Environment Variables (Auth)
+| Variable | Default | Purpose |
+|---|---|---|
+| `JWT_SECRET` | `visionbridge-dev-secret-change-in-production` | JWT signing secret |
+| `EXPO_PUBLIC_API_URL` | `https://$REPLIT_DEV_DOMAIN` | API base URL for mobile app |
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces
