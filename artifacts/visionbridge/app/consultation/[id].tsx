@@ -244,6 +244,7 @@ export default function ConsultationDetailScreen() {
       {/* ── Quick Actions ── */}
       <View style={styles.actionsGrid}>
         <ActionButton icon="user-check" label="Assign Doctor" color={colors.primary} onPress={() => setShowAssignForm(!showAssignForm)} disabled={!!consultation.assignedDoctorId || isClosed} />
+        <ActionButton icon="video" label="Start Call" color="#0ea5e9" onPress={() => router.push(`/consultation/call?id=${consultation.id}&patientName=${encodeURIComponent(patient ? `${patient.firstName} ${patient.lastName}` : "Patient")}`)} disabled={isClosed} />
         <ActionButton icon="edit-3" label="Add Response" color={colors.accent} onPress={() => setShowResponseForm(!showResponseForm)} disabled={isClosed} />
         <ActionButton icon="send" label="Create Referral" color={colors.warning} onPress={() => router.push(`/referral/new?consultationId=${consultation.id}&patientId=${consultation.patientId}`)} disabled={!!referral || isClosed} />
         <ActionButton icon="calendar" label="Book Appointment" color={colors.success} onPress={() => router.push(`/appointment/book?consultationId=${consultation.id}&patientId=${consultation.patientId}`)} disabled={!!appointment || isClosed} />

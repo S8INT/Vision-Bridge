@@ -22,7 +22,7 @@ Clinical-grade teleophthalmology mobile application built for low-resource setti
 
 ## Core Features
 
-### Consultation Workflow (7 responsibilities)
+### Consultation Workflow (8 responsibilities)
 1. Doctor assignment (round-robin, manual override)
 2. Clinical notes / diagnosis / treatment plan
 3. Referral tracking (internal + external)
@@ -30,6 +30,25 @@ Clinical-grade teleophthalmology mobile application built for low-resource setti
 5. Care coordination status (Pending → Assigned → InReview → Reviewed → Referred → Completed)
 6. Campaign bulk mode (link screenings/consultations to campaigns)
 7. Response + notifications
+8. **Video/Audio consultation** — WebRTC live call + async video note mode (low-bandwidth optimised)
+
+### Video/Audio Consultation (`consultation/call.tsx`)
+Three modes — switchable during a call:
+- **Live Video** — QVGA (160×120) @ 10fps, ~100 kbps; suitable for 3G+
+- **Audio Only** — Opus 16kHz mono, ~32 kbps; works on 2G/EDGE  
+- **Async Video Note** — Record 90s clip offline; queued for delivery when connection restores
+
+Low-bandwidth features:
+- Auto-downgrade banner when RTT > 400ms or packet loss > 8%
+- Real-time connection quality badge (Excellent/Good/Fair/Poor)
+- Economy/Standard quality presets
+- Connectivity guide visible in Async mode
+
+Backend signaling (`src/routes/signal.ts`, `src/lib/callRooms.ts`):
+- WebSocket server attached to the HTTP server (`/ws/signal`)
+- In-memory call room store per consultation ID
+- Forwards WebRTC offers, answers, ICE candidates between peers
+- Broadcasts peer-joined/peer-left events
 
 ### Imaging Service (7 responsibilities)
 1. Upload JPEG/PNG (camera or gallery, expo-image-picker)

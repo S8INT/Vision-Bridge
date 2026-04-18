@@ -69,6 +69,10 @@ function RootLayoutNav() {
         options={{ title: "Consultation" }}
       />
       <Stack.Screen
+        name="consultation/call"
+        options={{ headerShown: false, presentation: "fullScreenModal" }}
+      />
+      <Stack.Screen
         name="referral/new"
         options={{ title: "Create Referral", presentation: "modal" }}
       />
