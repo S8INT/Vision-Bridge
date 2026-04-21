@@ -198,6 +198,18 @@ Patient role permissions (rbac.ts): patient:read/update (own), image:upload/view
 
 Patient tabs: Home, Visits, Reports, Learn, Alerts. All clinical-staff tabs hidden for Patient.
 
+## Analytics & Visualizations
+
+Role-aware analytics render directly on the home dashboard via `components/analytics/RoleAnalytics.tsx`, using SVG chart primitives in `components/analytics/charts.tsx` (`BarChart`, `DonutChart`, `Sparkline`, `Legend`) built on `react-native-svg` — no extra chart dependency. All charts are responsive (use `useResponsive`) and theme-aware (use `useColors`).
+
+Per role:
+- **Admin** — 7-day screening volume bar chart, AI risk donut, user-role distribution donut.
+- **Doctor** — Consultation pipeline donut (status), AI risk donut, 7-day inflow bar.
+- **Technician** — 7-day capture bar, AI risk donut, image-quality donut (avg score + pass rate ≥70).
+- **CHW** — 7-day registrations bar, risk donut, top-5 villages by registration volume.
+- **Viewer** — Screening volume + risk donut + 7-day consultation inflow.
+- **Patient** — Personal risk-trend sparkline, all-time risk distribution donut, 7-day activity bar.
+
 ## Screen Routes
 
 - `/(tabs)/index` — Dashboard (role-aware: Patient sees Home with quick actions + next visit + latest report)

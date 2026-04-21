@@ -18,6 +18,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { ScreeningCard } from "@/components/ScreeningCard";
 import { ConsultationCard } from "@/components/ConsultationCard";
+import { RoleAnalytics } from "@/components/analytics/RoleAnalytics";
 
 // ── Role metadata displayed at top of each dashboard ─────────────────────────
 
@@ -399,6 +400,9 @@ export default function DashboardScreen() {
           </View>
         )}
       </View>
+
+      {/* ── Role-aware Analytics ── */}
+      <RoleAnalytics />
 
       {/* ── Quick Actions ── */}
       {role === "Viewer" ? (
