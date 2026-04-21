@@ -34,6 +34,7 @@ import {
   touchSession,
   recordAuditEvent,
   getAuditLog,
+  getDemoTenantId,
 } from "../lib/authStore.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { requireRole } from "../middlewares/rbac.js";
@@ -138,7 +139,7 @@ router.post("/register", async (req: Request, res: Response) => {
 
   const newUser = {
     id,
-    tenantId: "tenant-mbarara-001", // default tenant; multi-tenant onboarding TBD
+    tenantId: getDemoTenantId(), // default tenant; multi-tenant onboarding TBD
     email,
     passwordHash,
     role,
