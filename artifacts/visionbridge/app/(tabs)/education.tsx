@@ -11,6 +11,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useResponsive } from "@/hooks/useResponsive";
 
 interface Article {
   id: string;
@@ -153,6 +154,7 @@ type Category = typeof CATEGORIES[number];
 
 export default function EducationScreen() {
   const colors = useColors();
+  const r = useResponsive();
   const insets = useSafeAreaInsets();
   const [selectedCategory, setSelectedCategory] = useState<Category>("All");
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
@@ -233,7 +235,7 @@ export default function EducationScreen() {
           >
             <View style={styles.cardHeader}>
               <View style={[styles.iconBox, { backgroundColor: `${a.color}22` }]}>
-                <Feather name={a.icon as never} size={20} color={a.color} />
+                <Feather name={a.icon as never} size={r.iconSize(20)} color={a.color} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{a.title}</Text>
@@ -255,11 +257,11 @@ export default function EducationScreen() {
           <View style={styles.modalContainer}>
             <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
               <View style={[styles.iconBox, { backgroundColor: `${activeArticle.color}22` }]}>
-                <Feather name={activeArticle.icon as never} size={20} color={activeArticle.color} />
+                <Feather name={activeArticle.icon as never} size={r.iconSize(20)} color={activeArticle.color} />
               </View>
               <Text style={styles.modalTitle}>{activeArticle.category}</Text>
               <TouchableOpacity onPress={() => setActiveArticle(null)}>
-                <Feather name="x" size={24} color={colors.foreground} />
+                <Feather name="x" size={r.iconSize(24)} color={colors.foreground} />
               </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.modalContent}>

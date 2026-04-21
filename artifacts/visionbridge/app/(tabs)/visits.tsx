@@ -11,6 +11,7 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useApp, type Appointment } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/Badge";
@@ -32,6 +33,7 @@ function fmtFullDate(iso: string) {
 
 export default function VisitsScreen() {
   const colors = useColors();
+  const r = useResponsive();
   const insets = useSafeAreaInsets();
   const { patients, appointments } = useApp();
   const { user } = useAuth();
@@ -122,7 +124,7 @@ export default function VisitsScreen() {
           <Text style={styles.subtitle}>{upcoming.length} upcoming · {past.length} past</Text>
         </View>
         <TouchableOpacity style={styles.bookBtn} onPress={() => router.push(`/appointment/book?patientId=${myPatient.id}` as never)}>
-          <Feather name="plus" size={16} color="#fff" />
+          <Feather name="plus" size={r.iconSize(16)} color="#fff" />
           <Text style={styles.bookBtnText}>Book</Text>
         </TouchableOpacity>
       </View>
@@ -130,7 +132,7 @@ export default function VisitsScreen() {
       <Text style={styles.sectionLabel}>Upcoming</Text>
       {upcoming.length === 0 ? (
         <View style={styles.emptyState}>
-          <Feather name="calendar" size={28} color={colors.mutedForeground} />
+          <Feather name="calendar" size={r.iconSize(28)} color={colors.mutedForeground} />
           <Text style={styles.emptyText}>No upcoming visits.{"\n"}Tap "Book" to schedule one.</Text>
         </View>
       ) : (

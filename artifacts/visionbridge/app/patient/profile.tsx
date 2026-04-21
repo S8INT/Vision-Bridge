@@ -14,6 +14,7 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 
@@ -34,6 +35,7 @@ const COMMON_CONDITIONS = [
 
 export default function PatientProfileScreen() {
   const colors = useColors();
+  const r = useResponsive();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { patients, updatePatient } = useApp();
@@ -127,7 +129,7 @@ export default function PatientProfileScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.intro}>
-        <Feather name="lock" size={18} color={colors.primary} />
+        <Feather name="lock" size={r.iconSize(18)} color={colors.primary} />
         <Text style={styles.introText}>
           Your medical information is private and protected under the Uganda Data Protection and Privacy Act 2019. Only your care team can see it.
         </Text>
@@ -219,7 +221,7 @@ export default function PatientProfileScreen() {
       </View>
 
       <TouchableOpacity style={styles.submitBtn} onPress={save} activeOpacity={0.85}>
-        <Feather name="save" size={16} color="#fff" />
+        <Feather name="save" size={r.iconSize(16)} color="#fff" />
         <Text style={styles.submitBtnText}>Save Profile</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>

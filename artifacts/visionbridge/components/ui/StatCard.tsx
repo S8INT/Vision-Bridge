@@ -2,6 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
+import { useResponsive } from "@/hooks/useResponsive";
 
 interface StatCardProps {
   label: string;
@@ -13,17 +14,32 @@ interface StatCardProps {
 
 export function StatCard({ label, value, icon, color, subtitle }: StatCardProps) {
   const colors = useColors();
+  const { iconSize, font } = useResponsive();
   const iconColor = color || colors.primary;
+
+  // Scale the wrap container so the icon stays centred and proportional.
+  const iconBox = iconSize(36);
+  const innerIcon = iconSize(18);
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={[styles.iconWrap, { backgroundColor: iconColor + "18" }]}>
-        <Feather name={icon} size={18} color={iconColor} />
+      <View
+        style={[
+          styles.iconWrap,
+          {
+            backgroundColor: iconColor + "18",
+            width: iconBox,
+            height: iconBox,
+            borderRadius: iconBox / 3.5,
+          },
+        ]}
+      >
+        <Feather name={icon} size={innerIcon} color={iconColor} />
       </View>
-      <Text style={[styles.value, { color: colors.foreground }]}>{value}</Text>
-      <Text style={[styles.label, { color: colors.mutedForeground }]}>{label}</Text>
+      <Text style={[styles.value, { color: colors.foreground, fontSize: font(24) }]}>{value}</Text>
+      <Text style={[styles.label, { color: colors.mutedForeground, fontSize: font(12) }]}>{label}</Text>
       {subtitle ? (
-        <Text style={[styles.subtitle, { color: iconColor }]}>{subtitle}</Text>
+        <Text style={[styles.subtitle, { color: iconColor, fontSize: font(11) }]}>{subtitle}</Text>
       ) : null}
     </View>
   );
@@ -38,24 +54,18 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
   },
   value: {
-    fontSize: 24,
     fontWeight: "700",
     letterSpacing: -0.5,
   },
   label: {
-    fontSize: 12,
     fontWeight: "500",
   },
   subtitle: {
-    fontSize: 11,
     fontWeight: "600",
     marginTop: 2,
   },

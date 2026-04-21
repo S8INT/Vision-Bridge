@@ -11,6 +11,7 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useApp } from "@/context/AppContext";
 import { useAuth, type UserRole } from "@/context/AuthContext";
 import { StatCard } from "@/components/ui/StatCard";
@@ -145,9 +146,12 @@ function useStatsData() {
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const r = useResponsive();
   const { patients, screenings, consultations, appointments, unreadCount } = useApp();
   const { user, logout } = useAuth();
   const statsData = useStatsData();
+  // Quick-action grid: 2 cols on phones, 3 on tablets, 4 on wide web.
+  const actionMinWidth = `${Math.floor(100 / Math.min(r.cols, 4)) - 2}%` as const;
 
   const role: UserRole = user?.role ?? "Viewer";
   const roleMeta = ROLE_META[role];
@@ -219,7 +223,7 @@ export default function DashboardScreen() {
     facilityText: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
     headerActions: { flexDirection: "row", gap: 8, alignItems: "center" },
     iconBtn: {
-      width: 40, height: 40, borderRadius: 20,
+      width: r.iconSize(40), height: r.iconSize(40), borderRadius: r.iconSize(20),
       alignItems: "center", justifyContent: "center",
       backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
       position: "relative",
@@ -240,11 +244,11 @@ export default function DashboardScreen() {
     statsGrid: { flexDirection: "row", gap: 12 },
     actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
     actionBtn: {
-      flexDirection: "row", alignItems: "center", gap: 8,
-      paddingHorizontal: 16, paddingVertical: 14,
-      borderRadius: 12, flex: 1, minWidth: "45%",
+      flexDirection: "row", alignItems: "center", gap: r.iconSize(8),
+      paddingHorizontal: r.iconSize(16), paddingVertical: r.iconSize(14),
+      borderRadius: 12, flex: 1, minWidth: actionMinWidth,
     },
-    actionBtnText: { color: "#fff", fontSize: 13, fontFamily: "Inter_600SemiBold", flex: 1 },
+    actionBtnText: { color: "#fff", fontSize: r.font(13), fontFamily: "Inter_600SemiBold", flex: 1 },
     viewerNotice: {
       padding: 16, borderRadius: 12, borderWidth: 1,
       borderColor: colors.border, backgroundColor: colors.muted,
@@ -299,7 +303,7 @@ export default function DashboardScreen() {
           <Text style={styles.userName}>{user?.fullName ?? "—"}</Text>
           <View style={styles.facilityRow}>
             <View style={[styles.roleChip, { backgroundColor: roleMeta.color }]}>
-              <Feather name={roleMeta.icon as never} size={10} color="#fff" />
+              <Feather name={roleMeta.icon as never} size={r.iconSize(10)} color="#fff" />
               <Text style={styles.roleChipText}>{roleMeta.label}</Text>
             </View>
             {user?.facility ? (
@@ -310,14 +314,14 @@ export default function DashboardScreen() {
         <View style={styles.headerActions}>
           {unreadCount > 0 && role !== "Viewer" && role !== "CHW" && (
             <TouchableOpacity style={styles.iconBtn} onPress={() => router.push("/(tabs)/notifications")}>
-              <Feather name="bell" size={18} color={colors.foreground} />
+              <Feather name="bell" size={r.iconSize(18)} color={colors.foreground} />
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{unreadCount}</Text>
               </View>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.iconBtn} onPress={() => logout()}>
-            <Feather name="log-out" size={18} color={colors.mutedForeground} />
+            <Feather name="log-out" size={r.iconSize(18)} color={colors.mutedForeground} />
           </TouchableOpacity>
         </View>
       </View>
@@ -415,8 +419,8 @@ export default function DashboardScreen() {
                 onPress={() => router.push(action.route as never)}
                 activeOpacity={0.85}
               >
-                <Feather name={action.icon as never} size={18} color="#fff" />
-                <Text style={styles.actionBtnText}>{action.label}</Text>
+                <Feather name={action.icon as never} size={r.iconSize(18)} color="#fff" />
+                <Text style={styles.actionBtnText} numberOfLines={2}>{action.label}</Text>
               </TouchableOpacity>
             ))}
           </View>

@@ -11,6 +11,7 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/Badge";
@@ -25,6 +26,7 @@ const RISK_COLOR: Record<string, string> = {
 
 export default function ReportsScreen() {
   const colors = useColors();
+  const r = useResponsive();
   const insets = useSafeAreaInsets();
   const { patients, screenings, consultations } = useApp();
   const { user } = useAuth();
@@ -119,7 +121,7 @@ export default function ReportsScreen() {
       <Text style={styles.sectionLabel}>Consultations</Text>
       {myConsultations.length === 0 ? (
         <View style={styles.emptyState}>
-          <Feather name="file-text" size={28} color={colors.mutedForeground} />
+          <Feather name="file-text" size={r.iconSize(28)} color={colors.mutedForeground} />
           <Text style={styles.emptyText}>No consultations yet.{"\n"}Start a new consultation from the Home tab.</Text>
         </View>
       ) : (
@@ -157,7 +159,7 @@ export default function ReportsScreen() {
 
             {c.followUpDate && (
               <View style={styles.followBox}>
-                <Feather name="calendar" size={14} color={colors.success} />
+                <Feather name="calendar" size={r.iconSize(14)} color={colors.success} />
                 <Text style={styles.followText}>
                   Follow-up: {fmtDate(c.followUpDate)}
                 </Text>
@@ -184,7 +186,7 @@ export default function ReportsScreen() {
                 </Text>
                 <Text style={styles.meta}>{fmtDate(s.capturedAt)} · {s.status}</Text>
               </View>
-              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+              <Feather name="chevron-right" size={r.iconSize(18)} color={colors.mutedForeground} />
             </TouchableOpacity>
           ))}
         </>

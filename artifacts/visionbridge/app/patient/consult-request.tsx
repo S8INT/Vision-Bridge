@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useColors } from "@/hooks/useColors";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 
@@ -49,6 +50,8 @@ const COMMON_SYMPTOMS = [
 export default function ConsultRequestScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const r = useResponsive();
+  const specialtyMinWidth = `${Math.floor(100 / Math.min(r.cols, 3)) - 2}%` as const;
   const { user } = useAuth();
   const { patients, doctors, screenings, addConsultation, addNotification } = useApp();
 
@@ -148,9 +151,9 @@ export default function ConsultRequestScreen() {
     introText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: colors.foreground, lineHeight: 19 },
     optionsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
     optionCard: {
-      flexBasis: "47%", flexGrow: 1,
-      flexDirection: "row", alignItems: "center", gap: 10,
-      paddingHorizontal: 12, paddingVertical: 14,
+      flexBasis: specialtyMinWidth, flexGrow: 1,
+      flexDirection: "row", alignItems: "center", gap: r.iconSize(10),
+      paddingHorizontal: r.iconSize(12), paddingVertical: r.iconSize(14),
       borderRadius: 12, borderWidth: 1.5,
       backgroundColor: colors.card, borderColor: colors.border,
     },
@@ -217,7 +220,7 @@ export default function ConsultRequestScreen() {
                 onPress={() => setSpecialty(sp.id)}
                 activeOpacity={0.85}
               >
-                <Feather name={sp.icon as never} size={18} color={active ? colors.primary : colors.mutedForeground} />
+                <Feather name={sp.icon as never} size={r.iconSize(18)} color={active ? colors.primary : colors.mutedForeground} />
                 <Text style={styles.optionLabel}>{sp.label}</Text>
               </TouchableOpacity>
             );
