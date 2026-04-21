@@ -57,6 +57,14 @@ function RootLayoutNav() {
         options={{ title: "Patient" }}
       />
       <Stack.Screen
+        name="patient/profile"
+        options={{ title: "My Profile & Medical History", presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="patient/consult-request"
+        options={{ title: "Request Consultation", presentation: "modal" }}
+      />
+      <Stack.Screen
         name="screening/new"
         options={{ title: "New Screening", presentation: "modal" }}
       />

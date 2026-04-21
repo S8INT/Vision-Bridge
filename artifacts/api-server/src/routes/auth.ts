@@ -90,7 +90,7 @@ const mfaSetupVerifySchema = z.object({
 const createUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  role: z.enum(["Admin", "Doctor", "Technician", "CHW", "Viewer"]),
+  role: z.enum(["Admin", "Doctor", "Technician", "CHW", "Viewer", "Patient"]),
   fullName: z.string().min(2),
   facility: z.string().optional(),
   district: z.string().optional(),

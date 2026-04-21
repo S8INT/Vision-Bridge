@@ -21,6 +21,7 @@ const DEMO_ACCOUNTS = [
   { label: "Technician", email: "sarah.nakato@visionbridge.ug", password: "Tech1234!" },
   { label: "CHW", email: "chw.mbarara@visionbridge.ug", password: "CHW1234!" },
   { label: "Viewer", email: "viewer@visionbridge.ug", password: "Viewer1234!" },
+  { label: "Patient", email: "grace.atuhaire@patient.visionbridge.ug", password: "Patient1234!" },
 ];
 
 export default function LoginScreen() {
@@ -155,6 +156,7 @@ export default function LoginScreen() {
     Technician: "#10b981",
     CHW: "#f59e0b",
     Viewer: "#64748b",
+    Patient: "#ec4899",
   };
 
   return (

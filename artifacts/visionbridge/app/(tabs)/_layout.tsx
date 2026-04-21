@@ -12,13 +12,14 @@ import { useApp } from "@/context/AppContext";
 import { useAuth, type UserRole } from "@/context/AuthContext";
 
 // ── Per-role tab visibility ───────────────────────────────────────────────────
-// Based on 5.3 RBAC Permission Matrix (VisionBridge UG v1.0)
+// Based on 5.3 RBAC Permission Matrix (VisionBridge UG v1.0) + Patient flow
 const TAB_VISIBILITY: Record<UserRole, Record<string, boolean>> = {
-  Admin:      { index: true, patients: true, consultations: true, analytics: true, campaigns: true, notifications: true },
-  Doctor:     { index: true, patients: true, consultations: true, analytics: true, campaigns: false, notifications: true },
-  Technician: { index: true, patients: true, consultations: false, analytics: false, campaigns: true, notifications: true },
-  CHW:        { index: true, patients: true, consultations: false, analytics: false, campaigns: true, notifications: false },
-  Viewer:     { index: true, patients: false, consultations: false, analytics: true, campaigns: false, notifications: false },
+  Admin:      { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: true,  notifications: true,  visits: false, reports: false, education: false },
+  Doctor:     { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: false, notifications: true,  visits: false, reports: false, education: false },
+  Technician: { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: true,  visits: false, reports: false, education: false },
+  CHW:        { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: false, visits: false, reports: false, education: false },
+  Viewer:     { index: true, patients: false, consultations: false, analytics: true,  campaigns: false, notifications: false, visits: false, reports: false, education: false },
+  Patient:    { index: true, patients: false, consultations: false, analytics: false, campaigns: false, notifications: true,  visits: true,  reports: true,  education: true  },
 };
 
 function useTabVisible(tabName: string): boolean {
@@ -37,8 +38,26 @@ function NativeTabLayout() {
     <NativeTabs>
       <NativeTabs.Trigger name="index">
         <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>Dashboard</Label>
+        <Label>{role === "Patient" ? "Home" : "Dashboard"}</Label>
       </NativeTabs.Trigger>
+      {vis.visits && (
+        <NativeTabs.Trigger name="visits">
+          <Icon sf={{ default: "calendar", selected: "calendar" }} />
+          <Label>Visits</Label>
+        </NativeTabs.Trigger>
+      )}
+      {vis.reports && (
+        <NativeTabs.Trigger name="reports">
+          <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
+          <Label>Reports</Label>
+        </NativeTabs.Trigger>
+      )}
+      {vis.education && (
+        <NativeTabs.Trigger name="education">
+          <Icon sf={{ default: "book", selected: "book.fill" }} />
+          <Label>Learn</Label>
+        </NativeTabs.Trigger>
+      )}
       {vis.patients && (
         <NativeTabs.Trigger name="patients">
           <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
@@ -81,7 +100,12 @@ function ClassicTabLayout() {
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
   const { unreadCount } = useApp();
+  const { user } = useAuth();
+  const role: UserRole = user?.role ?? "Viewer";
 
+  const showVisits        = useTabVisible("visits");
+  const showReports       = useTabVisible("reports");
+  const showEducation     = useTabVisible("education");
   const showPatients      = useTabVisible("patients");
   const showConsultations = useTabVisible("consultations");
   const showAnalytics     = useTabVisible("analytics");
@@ -115,9 +139,36 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Dashboard",
+          title: role === "Patient" ? "Home" : "Dashboard",
           tabBarIcon: ({ color }) =>
             isIOS ? <SymbolView name="house" tintColor={color} size={24} /> : <Feather name="home" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="visits"
+        options={{
+          title: "Visits",
+          ...(showVisits ? {} : hide),
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="calendar" tintColor={color} size={24} /> : <Feather name="calendar" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="reports"
+        options={{
+          title: "Reports",
+          ...(showReports ? {} : hide),
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="doc.text" tintColor={color} size={24} /> : <Feather name="file-text" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="education"
+        options={{
+          title: "Learn",
+          ...(showEducation ? {} : hide),
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="book" tintColor={color} size={24} /> : <Feather name="book-open" size={22} color={color} />,
         }}
       />
       <Tabs.Screen

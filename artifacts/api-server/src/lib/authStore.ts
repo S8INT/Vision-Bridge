@@ -170,6 +170,23 @@ async function seed() {
       dppaConsentIp: "127.0.0.1",
       lastLoginAt: null,
     },
+    {
+      tenantId: DEMO_TENANT_ID,
+      email: "grace.atuhaire@patient.visionbridge.ug",
+      password: "Patient1234!",
+      role: "Patient",
+      fullName: "Grace Atuhaire",
+      facility: "Mbarara RRH Eye Unit",
+      district: "Mbarara",
+      phone: "+256701234567",
+      isActive: true,
+      mfaEnabled: false,
+      mfaSecret: null,
+      mfaPendingSecret: null,
+      dppaConsentAt: new Date(),
+      dppaConsentIp: "127.0.0.1",
+      lastLoginAt: null,
+    },
   ];
 
   for (const u of demoUsers) {

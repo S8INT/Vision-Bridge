@@ -183,17 +183,35 @@ If MinIO is not configured, the imaging service falls back to in-memory local st
 
 ## Demo Data
 
-Pre-seeded with 7 patients (Mbarara district), 7 screenings with AI results, 3 consultations, 4 doctors (round-robin assignment), 1 referral, 1 appointment, 2 campaigns. All stored in AsyncStorage key `visionbridge_v2`.
+Pre-seeded with 7 patients (Mbarara district), 7 screenings with AI results, 4 consultations (incl. completed report for Grace Atuhaire), 4 doctors (round-robin assignment), 1 referral, 3 appointments (incl. 2 upcoming for Grace), 2 campaigns. All stored in AsyncStorage key `visionbridge_v2`.
+
+## Roles & Demo Accounts (login screen demo buttons)
+
+- Admin · admin@visionbridge.ug / Admin1234!
+- Doctor · dr.okello@visionbridge.ug / Doctor1234!
+- Technician · sarah.nakato@visionbridge.ug / Tech1234!
+- CHW · chw.mbarara@visionbridge.ug / CHW1234!
+- Viewer · viewer@visionbridge.ug / Viewer1234!
+- Patient · grace.atuhaire@patient.visionbridge.ug / Patient1234! (linked to patient record `p-001` Grace Atuhaire)
+
+Patient role permissions (rbac.ts): patient:read/update (own), image:upload/view, aiResults:view, consultation:create/read/list, referral:read, mfa:manage, session:list/delete.
+
+Patient tabs: Home, Visits, Reports, Learn, Alerts. All clinical-staff tabs hidden for Patient.
 
 ## Screen Routes
 
-- `/(tabs)/index` — Dashboard
+- `/(tabs)/index` — Dashboard (role-aware: Patient sees Home with quick actions + next visit + latest report)
 - `/(tabs)/patients` — Patient list with search/filter
 - `/(tabs)/consultations` — Consultation queue with status filters
 - `/(tabs)/campaigns` — Campaign overview
 - `/(tabs)/notifications` — Notification center with badge
-- `/patient/register` — New patient registration (modal)
-- `/patient/[id]` — Patient detail + screening history
+- `/(tabs)/visits` — Patient: upcoming + past appointments calendar
+- `/(tabs)/reports` — Patient: past consultations with diagnosis, doctor's notes, prescription, follow-up
+- `/(tabs)/education` — Patient: educational articles (diabetes, glaucoma, cataracts, prevention, children) with category filters and detail modal
+- `/patient/register` — New patient registration (modal, clinical staff)
+- `/patient/[id]` — Patient detail + screening history (clinical staff)
+- `/patient/profile` — Patient: edit own profile + medical history (modal)
+- `/patient/consult-request` — Patient: start new consultation (specialty + priority + symptoms + image upload, modal)
 - `/screening/new` — Full imaging pipeline (capture → quality → upload → AI analysis → result)
 - `/screening/[id]` — Screening detail
 - `/consultation/[id]` — Consultation with doctor assignment, referral/appointment linking

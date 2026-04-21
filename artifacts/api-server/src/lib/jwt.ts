@@ -7,7 +7,7 @@
 import jwt from "jsonwebtoken";
 import { randomBytes } from "crypto";
 
-export type UserRole = "Admin" | "Doctor" | "Technician" | "CHW" | "Viewer";
+export type UserRole = "Admin" | "Doctor" | "Technician" | "CHW" | "Viewer" | "Patient";
 
 export interface TokenPayload {
   sub: string;

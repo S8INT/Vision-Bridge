@@ -7,7 +7,7 @@
  *            billing | analytics | models | tenantConfig | session | auditLog
  */
 
-export type Role = "Admin" | "Doctor" | "Technician" | "CHW" | "Viewer";
+export type Role = "Admin" | "Doctor" | "Technician" | "CHW" | "Viewer" | "Patient";
 
 export type Resource =
   | "patient"
@@ -116,6 +116,21 @@ const PERMISSIONS: PermMatrix = {
     session: [],
     auditLog: [],
     mfa: [],
+    users: [],
+  },
+  Patient: {
+    patient: ["read", "update"],
+    image: ["upload", "view"],
+    aiResults: ["view"],
+    consultation: ["create", "read", "list"],
+    referral: ["read"],
+    billing: [],
+    analytics: [],
+    models: [],
+    tenantConfig: [],
+    session: ["list", "delete"],
+    auditLog: [],
+    mfa: ["manage"],
     users: [],
   },
 };

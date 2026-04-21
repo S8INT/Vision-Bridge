@@ -14,7 +14,7 @@ import * as SecureStore from "expo-secure-store";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type UserRole = "Admin" | "Doctor" | "Technician" | "CHW" | "Viewer";
+export type UserRole = "Admin" | "Doctor" | "Technician" | "CHW" | "Viewer" | "Patient";
 
 export interface AuthUser {
   id: string;
