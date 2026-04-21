@@ -148,6 +148,9 @@ export default function LoginScreen() {
       backgroundColor: colors.muted,
     },
     roleChipText: { fontSize: 10, fontFamily: "Inter_500Medium", color: colors.mutedForeground },
+    signupLink: { alignItems: "center", marginTop: 18, paddingVertical: 6 },
+    signupLinkText: { fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
+    signupLinkAction: { color: colors.primary, fontFamily: "Inter_600SemiBold" },
   });
 
   const ROLE_COLORS: Record<string, string> = {
@@ -234,6 +237,17 @@ export default function LoginScreen() {
               By signing in you consent to processing of health data under the Uganda Data Protection and Privacy Act 2019 (DPPA). Data is processed only for clinical screening and referral purposes.
             </Text>
           </View>
+
+          <TouchableOpacity
+            style={s.signupLink}
+            onPress={() => router.push("/signup")}
+            disabled={loading}
+          >
+            <Text style={s.signupLinkText}>
+              New to VisionBridge?{" "}
+              <Text style={s.signupLinkAction}>Create an account</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Demo accounts — each logs in directly with its own role */}

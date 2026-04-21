@@ -49,12 +49,28 @@ interface AuthState {
 
 interface AuthActions {
   login: (email: string, password: string, deviceInfo?: DeviceInfo) => Promise<LoginResult>;
+  register: (input: RegisterInput, deviceInfo?: DeviceInfo) => Promise<RegisterResult>;
   completeMfa: (code: string) => Promise<void>;
   logout: (allDevices?: boolean) => Promise<void>;
   refreshToken: () => Promise<boolean>;
   getAuthHeaders: () => Record<string, string>;
   can: (resource: string, action: string) => boolean;
 }
+
+export interface RegisterInput {
+  email: string;
+  password: string;
+  role: Exclude<UserRole, "Admin">;
+  fullName: string;
+  facility: string;
+  district: string;
+  phone?: string;
+  dppaConsent: true;
+}
+
+export type RegisterResult =
+  | { success: true }
+  | { success: false; error: string };
 
 export interface DeviceInfo {
   deviceId?: string;
@@ -249,6 +265,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [scheduleRefresh]);
 
+  // ── Register (self-service signup) ─────────────────────────────────────────
+
+  const register = useCallback(async (
+    input: RegisterInput,
+    deviceInfo?: DeviceInfo,
+  ): Promise<RegisterResult> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          deviceId: deviceInfo?.deviceId,
+          deviceName: deviceInfo?.deviceName ?? "VisionBridge Mobile",
+          devicePlatform: deviceInfo?.devicePlatform ?? "expo",
+        }),
+      });
+
+      const data = await res.json() as {
+        accessToken?: string;
+        refreshToken?: string;
+        expiresIn?: number;
+        user?: AuthUser;
+        permissions?: Permission;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        return { success: false, error: data.error ?? "Registration failed" };
+      }
+
+      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, data.refreshToken!);
+      setState((s) => ({
+        ...s,
+        accessToken: data.accessToken!,
+        user: data.user!,
+        permissions: data.permissions!,
+        isAuthenticated: true,
+        mfaChallenge: null,
+      }));
+      scheduleRefresh(data.expiresIn ?? 900);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: "Network error. Check your connection and try again." };
+    }
+  }, [scheduleRefresh]);
+
   // ── MFA Completion ─────────────────────────────────────────────────────────
 
   const completeMfa = useCallback(async (code: string): Promise<void> => {
@@ -327,6 +390,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextValue = {
     ...state,
     login,
+    register,
     completeMfa,
     logout,
     refreshToken,
