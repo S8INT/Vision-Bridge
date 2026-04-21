@@ -102,7 +102,7 @@ const createUserSchema = z.object({
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["Doctor", "Technician", "CHW", "Viewer"]),
+  role: z.enum(["Doctor", "Technician", "CHW", "Viewer", "Patient"]),
   fullName: z.string().min(2),
   facility: z.string().min(1),
   district: z.string().min(1),

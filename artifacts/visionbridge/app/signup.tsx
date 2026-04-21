@@ -19,6 +19,13 @@ interface RoleOption {
 
 const ROLE_OPTIONS: RoleOption[] = [
   {
+    value: "Patient",
+    label: "Patient",
+    description: "Book appointments, view your eye-screening results and referrals",
+    color: "#ec4899",
+    icon: "heart",
+  },
+  {
     value: "CHW",
     label: "Community Health Worker",
     description: "Field outreach, patient registration, basic screening",
