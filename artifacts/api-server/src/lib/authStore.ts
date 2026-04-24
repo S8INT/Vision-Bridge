@@ -280,6 +280,13 @@ export async function initAuthStore(): Promise<void> {
       tenantsByName.set(DEMO_TENANT_NAME, tenantsById.get(DEMO_TENANT_ID)!);
       await seedDemoUsers(DEMO_TENANT_ID);
       await hydrateCache(DEMO_TENANT_ID);
+      // Seed clinical demo data (idempotent)
+      try {
+        const { seedClinicalDemoData } = await import("./clinicalSeed.js");
+        await seedClinicalDemoData(DEMO_TENANT_ID);
+      } catch (e) {
+        console.warn("[authStore] clinical seed failed:", (e as Error)?.message);
+      }
       // Hydrate audit log (most recent 1000)
       const auditRows = await db.select().from(authAuditLogTable).limit(1000);
       for (const r of auditRows) auditLog.push(rowToAudit(r));

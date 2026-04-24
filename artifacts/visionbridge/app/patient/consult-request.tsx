@@ -90,7 +90,7 @@ export default function ConsultRequestScreen() {
     }
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!myPatient) {
       Alert.alert("Profile not linked", "Your patient record could not be found.");
       return;
@@ -108,20 +108,27 @@ export default function ConsultRequestScreen() {
     const myScreening = screenings.find((s) => s.patientId === myPatient.id);
     const specialtyLabel = SPECIALTIES.find((s) => s.id === specialty)?.label ?? "General Eye Care";
 
-    const consultation = addConsultation({
+    let consultation;
+    try {
+      consultation = await addConsultation({
       screeningId: myScreening?.id ?? "self-reported",
       patientId: myPatient.id,
       requestedBy: user?.id ?? "patient",
       status: "Pending",
       priority,
-      clinicalNotes: `Patient-requested ${specialtyLabel} consultation.\n\nSymptoms: ${allSymptoms.join(", ")}.${imageUri ? "\n\nPatient attached an eye image." : ""}`,
-    });
+        clinicalNotes: `Patient-requested ${specialtyLabel} consultation.\n\nSymptoms: ${allSymptoms.join(", ")}.${imageUri ? "\n\nPatient attached an eye image." : ""}`,
+      });
+    } catch (err) {
+      setSubmitting(false);
+      Alert.alert("Submit Failed", "Could not send your request. Please try again.");
+      return;
+    }
 
     // Round-robin assign to an available doctor specialised (or default)
     const candidates = doctors.filter((d) => d.isAvailable);
     const assigned = candidates[0];
 
-    addNotification({
+    await addNotification({
       type: "ConsultationUpdate",
       title: "Consultation Request Received",
       body: `Your ${specialtyLabel.toLowerCase()} request has been submitted. ${assigned ? `${assigned.name} will respond shortly.` : "A specialist will respond shortly."}`,

@@ -183,10 +183,58 @@ router.get("/", async (req: Request, res: Response) => {
 
   try {
     const rows = await db!.select().from(patientsTable).where(eq(patientsTable.tenantId, req.auth.tenantId));
-    res.json({ patients: rows });
+    res.json({ items: rows, patients: rows });
   } catch (err) {
     console.error("[patients] GET / failed:", err);
     res.status(500).json({ error: "Failed to list patients" });
+  }
+});
+
+// ── POST / (clinician creates a patient record) ────────────────────────────
+router.post("/", async (req: Request, res: Response) => {
+  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
+  if (req.auth.role === "Patient") { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!dbAvailable()) { res.status(503).json({ error: "Database unavailable" }); return; }
+  try {
+    const body = req.body ?? {};
+    const patientId: string = body.patientId
+      || `${(req.auth.tenantId ?? "TNT").slice(0, 3).toUpperCase()}-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+    const [row] = await db!.insert(patientsTable).values({
+      tenantId: req.auth.tenantId,
+      patientId,
+      firstName: body.firstName,
+      lastName: body.lastName,
+      dateOfBirth: body.dateOfBirth,
+      sex: body.sex,
+      phone: body.phone,
+      village: body.village,
+      district: body.district,
+      medicalHistory: body.medicalHistory ?? [],
+      campaignId: body.campaignId ?? null,
+      lastVisit: body.lastVisit ? new Date(body.lastVisit) : null,
+    }).returning();
+    res.status(201).json({ item: row });
+  } catch (err) {
+    console.error("[patients] POST / failed:", err);
+    res.status(400).json({ error: "Failed to create patient", detail: String(err) });
+  }
+});
+
+// ── PATCH /:id (clinician updates a patient record) ────────────────────────
+router.patch("/:id", async (req: Request, res: Response) => {
+  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
+  if (req.auth.role === "Patient") { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!dbAvailable()) { res.status(503).json({ error: "Database unavailable" }); return; }
+  const { id } = req.params;
+  try {
+    const updates = { ...req.body };
+    if (updates.lastVisit) updates.lastVisit = new Date(updates.lastVisit);
+    const [row] = await db!.update(patientsTable).set(updates).where(eq(patientsTable.id, id)).returning();
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    res.json({ item: row });
+  } catch (err) {
+    console.error("[patients] PATCH /:id failed:", err);
+    res.status(400).json({ error: "Failed to update patient", detail: String(err) });
   }
 });
 

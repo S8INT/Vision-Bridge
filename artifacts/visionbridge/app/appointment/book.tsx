@@ -50,7 +50,7 @@ export default function BookAppointmentScreen() {
   const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
   const botPad = Platform.OS === "web" ? 34 : 0;
 
-  function handleBooking() {
+  async function handleBooking() {
     if (!apptType) { Alert.alert("Select Type", "Please choose an appointment type."); return; }
     if (!selectedSlot) { Alert.alert("Select Provider", "Please choose a provider from the marketplace."); return; }
     if (!selectedDate) { Alert.alert("Select Date", "Please choose an available date."); return; }
@@ -58,7 +58,7 @@ export default function BookAppointmentScreen() {
 
     setSaving(true);
     try {
-      const appt = addAppointment({
+      const appt = await addAppointment({
         patientId,
         consultationId: consultationId || undefined,
         type: apptType,
