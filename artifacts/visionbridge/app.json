@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "VisionBridge",
-    "slug": "visionbridge",
+    "name": "Eretina",
+    "slug": "eretina",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "visionbridge",
+    "scheme": "eretina",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -14,9 +14,12 @@
       "backgroundColor": "#0ea5e9"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.eretina.app"
     },
-    "android": {},
+    "android": {
+      "package": "com.eretina.app"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
