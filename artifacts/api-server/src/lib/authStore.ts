@@ -15,7 +15,6 @@
  */
 
 import { randomUUID } from "crypto";
-import { hashPassword } from "./password.js";
 import type { UserRole } from "./jwt.js";
 import {
   db,
@@ -180,36 +179,6 @@ async function ensureDemoTenant(): Promise<string> {
   return inserted[0]!.id;
 }
 
-async function seedDemoUsers(tenantId: string) {
-  const demoUsers = [
-    { email: "admin@visionbridge.ug", password: "Admin1234!", role: "Admin" as UserRole, fullName: "System Administrator", facility: "Mbarara RRH Eye Unit", district: "Mbarara", phone: "+256701000001" },
-    { email: "dr.okello@visionbridge.ug", password: "Doctor1234!", role: "Doctor" as UserRole, fullName: "Dr. James Okello", facility: "Mbarara RRH Eye Unit", district: "Mbarara", phone: "+256701000002" },
-    { email: "sarah.nakato@visionbridge.ug", password: "Tech1234!", role: "Technician" as UserRole, fullName: "Sarah Nakato", facility: "Mbarara RRH Eye Unit", district: "Mbarara", phone: "+256701000003" },
-    { email: "chw.mbarara@visionbridge.ug", password: "CHW1234!", role: "CHW" as UserRole, fullName: "Grace Akello", facility: "Mbarara HC III", district: "Mbarara", phone: "+256701000004" },
-    { email: "viewer@visionbridge.ug", password: "Viewer1234!", role: "Viewer" as UserRole, fullName: "District Health Officer", facility: "Mbarara District Health Office", district: "Mbarara" },
-  ];
-
-  for (const u of demoUsers) {
-    const existing = await db.select().from(usersTable).where(eq(usersTable.email, u.email)).limit(1);
-    if (existing.length > 0) continue;
-    const hash = await hashPassword(u.password);
-    await db.insert(usersTable).values({
-      tenantId,
-      email: u.email,
-      passwordHash: hash,
-      role: u.role,
-      fullName: u.fullName,
-      facility: u.facility,
-      district: u.district,
-      phone: u.phone,
-      isActive: true,
-      mfaEnabled: false,
-      dppaConsentAt: new Date(),
-      dppaConsentIp: "127.0.0.1",
-    });
-  }
-}
-
 async function hydrateCache(tenantId: string) {
   const userRows = await db.select().from(usersTable).where(eq(usersTable.tenantId, tenantId));
   for (const r of userRows) {
@@ -228,45 +197,12 @@ async function hydrateCache(tenantId: string) {
 }
 
 function seedMockMode() {
-  // No DB available — seed an in-memory tenant + demo users so the app still works.
+  // No DB available — set up an empty in-memory tenant so the app still boots.
   const tenantId = "tenant-mbarara-mock";
   DEMO_TENANT_ID = tenantId;
   tenantsById.set(tenantId, { id: tenantId, name: DEMO_TENANT_NAME, district: "Mbarara" });
   tenantsByName.set(DEMO_TENANT_NAME, tenantsById.get(tenantId)!);
-
-  const demoUsers = [
-    { email: "admin@visionbridge.ug", password: "Admin1234!", role: "Admin" as UserRole, fullName: "System Administrator", facility: "Mbarara RRH Eye Unit", district: "Mbarara", phone: "+256701000001" },
-    { email: "dr.okello@visionbridge.ug", password: "Doctor1234!", role: "Doctor" as UserRole, fullName: "Dr. James Okello", facility: "Mbarara RRH Eye Unit", district: "Mbarara", phone: "+256701000002" },
-    { email: "sarah.nakato@visionbridge.ug", password: "Tech1234!", role: "Technician" as UserRole, fullName: "Sarah Nakato", facility: "Mbarara RRH Eye Unit", district: "Mbarara", phone: "+256701000003" },
-    { email: "chw.mbarara@visionbridge.ug", password: "CHW1234!", role: "CHW" as UserRole, fullName: "Grace Akello", facility: "Mbarara HC III", district: "Mbarara", phone: "+256701000004" },
-    { email: "viewer@visionbridge.ug", password: "Viewer1234!", role: "Viewer" as UserRole, fullName: "District Health Officer", facility: "Mbarara District Health Office", district: "Mbarara", phone: "" },
-  ];
-
-  // Seed synchronously enough for tests; real hashing is async but we just await all
-  return Promise.all(demoUsers.map(async (u) => {
-    const passwordHash = await hashPassword(u.password);
-    const id = randomUUID();
-    users.set(id, {
-      id,
-      tenantId,
-      email: u.email,
-      passwordHash,
-      role: u.role,
-      fullName: u.fullName,
-      facility: u.facility,
-      district: u.district,
-      phone: u.phone || undefined,
-      isActive: true,
-      mfaEnabled: false,
-      mfaSecret: null,
-      mfaPendingSecret: null,
-      dppaConsentAt: new Date(),
-      dppaConsentIp: "127.0.0.1",
-      createdAt: new Date(),
-      lastLoginAt: null,
-    });
-    sessionsByUser.set(id, new Set());
-  })).then(() => undefined);
+  return Promise.resolve();
 }
 
 export async function initAuthStore(): Promise<void> {
@@ -278,15 +214,7 @@ export async function initAuthStore(): Promise<void> {
       DEMO_TENANT_ID = await ensureDemoTenant();
       tenantsById.set(DEMO_TENANT_ID, { id: DEMO_TENANT_ID, name: DEMO_TENANT_NAME, district: "Mbarara" });
       tenantsByName.set(DEMO_TENANT_NAME, tenantsById.get(DEMO_TENANT_ID)!);
-      await seedDemoUsers(DEMO_TENANT_ID);
       await hydrateCache(DEMO_TENANT_ID);
-      // Seed clinical demo data (idempotent)
-      try {
-        const { seedClinicalDemoData } = await import("./clinicalSeed.js");
-        await seedClinicalDemoData(DEMO_TENANT_ID);
-      } catch (e) {
-        console.warn("[authStore] clinical seed failed:", (e as Error)?.message);
-      }
       // Hydrate audit log (most recent 1000)
       const auditRows = await db.select().from(authAuditLogTable).limit(1000);
       for (const r of auditRows) auditLog.push(rowToAudit(r));
