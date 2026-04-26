@@ -28,7 +28,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLoading) return;
 
-    const inAuthGroup = segments[0] === "login" || segments[0] === "mfa";
+    const inAuthGroup = segments[0] === "login" || segments[0] === "mfa" || segments[0] === "signup";
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace("/login");
@@ -46,6 +46,7 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerBackTitle: "Back", headerTintColor: "#0ea5e9" }}>
       <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="signup" options={{ headerShown: false }} />
       <Stack.Screen name="mfa" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen

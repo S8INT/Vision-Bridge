@@ -2,7 +2,7 @@ import { pgTable, text, timestamp, boolean, uuid, jsonb } from "drizzle-orm/pg-c
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export type UserRole = "Admin" | "Doctor" | "Technician" | "CHW" | "Viewer";
+export type UserRole = "Admin" | "Doctor" | "Technician" | "CHW" | "Viewer" | "Patient";
 
 export const tenantsTable = pgTable("tenants", {
   id: uuid("id").defaultRandom().primaryKey(),

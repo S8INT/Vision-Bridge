@@ -36,14 +36,31 @@ function NativeTabLayout() {
 
   return (
     <NativeTabs>
+      {/* 1. Home — always first */}
       <NativeTabs.Trigger name="index">
         <Icon sf={{ default: "house", selected: "house.fill" }} />
         <Label>{role === "Patient" ? "Home" : "Dashboard"}</Label>
       </NativeTabs.Trigger>
+
+      {/* 2. Daily work */}
+      {vis.patients && (
+        <NativeTabs.Trigger name="patients">
+          <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
+          <Label>Patients</Label>
+        </NativeTabs.Trigger>
+      )}
       {vis.visits && (
         <NativeTabs.Trigger name="visits">
           <Icon sf={{ default: "calendar", selected: "calendar" }} />
           <Label>Visits</Label>
+        </NativeTabs.Trigger>
+      )}
+
+      {/* 3. Engage */}
+      {vis.consultations && (
+        <NativeTabs.Trigger name="consultations">
+          <Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
+          <Label>Consults</Label>
         </NativeTabs.Trigger>
       )}
       {vis.reports && (
@@ -58,16 +75,12 @@ function NativeTabLayout() {
           <Label>Learn</Label>
         </NativeTabs.Trigger>
       )}
-      {vis.patients && (
-        <NativeTabs.Trigger name="patients">
-          <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
-          <Label>Patients</Label>
-        </NativeTabs.Trigger>
-      )}
-      {vis.consultations && (
-        <NativeTabs.Trigger name="consultations">
-          <Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
-          <Label>Consults</Label>
+
+      {/* 4. Outreach & insight */}
+      {vis.campaigns && (
+        <NativeTabs.Trigger name="campaigns">
+          <Icon sf={{ default: "map", selected: "map.fill" }} />
+          <Label>Campaigns</Label>
         </NativeTabs.Trigger>
       )}
       {vis.analytics && (
@@ -76,12 +89,8 @@ function NativeTabLayout() {
           <Label>Analytics</Label>
         </NativeTabs.Trigger>
       )}
-      {vis.campaigns && (
-        <NativeTabs.Trigger name="campaigns">
-          <Icon sf={{ default: "map", selected: "map.fill" }} />
-          <Label>Campaigns</Label>
-        </NativeTabs.Trigger>
-      )}
+
+      {/* 5. Alerts — always last */}
       {vis.notifications && (
         <NativeTabs.Trigger name="notifications">
           <Icon sf={{ default: "bell", selected: "bell.fill" }} />
@@ -136,12 +145,24 @@ function ClassicTabLayout() {
           ) : null,
       }}
     >
+      {/* 1. Home — always first */}
       <Tabs.Screen
         name="index"
         options={{
           title: role === "Patient" ? "Home" : "Dashboard",
           tabBarIcon: ({ color }) =>
             isIOS ? <SymbolView name="house" tintColor={color} size={24} /> : <Feather name="home" size={22} color={color} />,
+        }}
+      />
+
+      {/* 2. Daily work */}
+      <Tabs.Screen
+        name="patients"
+        options={{
+          title: "Patients",
+          ...(showPatients ? {} : hide),
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="person.2" tintColor={color} size={24} /> : <Feather name="users" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -151,6 +172,17 @@ function ClassicTabLayout() {
           ...(showVisits ? {} : hide),
           tabBarIcon: ({ color }) =>
             isIOS ? <SymbolView name="calendar" tintColor={color} size={24} /> : <Feather name="calendar" size={22} color={color} />,
+        }}
+      />
+
+      {/* 3. Engage */}
+      <Tabs.Screen
+        name="consultations"
+        options={{
+          title: "Consults",
+          ...(showConsultations ? {} : hide),
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="message.circle" tintColor={color} size={24} /> : <Feather name="message-circle" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -171,22 +203,15 @@ function ClassicTabLayout() {
             isIOS ? <SymbolView name="book" tintColor={color} size={24} /> : <Feather name="book-open" size={22} color={color} />,
         }}
       />
+
+      {/* 4. Outreach & insight */}
       <Tabs.Screen
-        name="patients"
+        name="campaigns"
         options={{
-          title: "Patients",
-          ...(showPatients ? {} : hide),
+          title: "Campaigns",
+          ...(showCampaigns ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="person.2" tintColor={color} size={24} /> : <Feather name="users" size={22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="consultations"
-        options={{
-          title: "Consults",
-          ...(showConsultations ? {} : hide),
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="message.circle" tintColor={color} size={24} /> : <Feather name="message-circle" size={22} color={color} />,
+            isIOS ? <SymbolView name="map" tintColor={color} size={24} /> : <Feather name="map-pin" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -198,15 +223,8 @@ function ClassicTabLayout() {
             isIOS ? <SymbolView name="chart.bar" tintColor={color} size={24} /> : <Feather name="bar-chart-2" size={22} color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="campaigns"
-        options={{
-          title: "Campaigns",
-          ...(showCampaigns ? {} : hide),
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="map" tintColor={color} size={24} /> : <Feather name="map-pin" size={22} color={color} />,
-        }}
-      />
+
+      {/* 5. Alerts — always last */}
       <Tabs.Screen
         name="notifications"
         options={{

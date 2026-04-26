@@ -55,14 +55,14 @@ export default function NewReferralScreen() {
 
   const facilities = referralType === "Internal" ? FACILITIES_INTERNAL : FACILITIES_EXTERNAL;
 
-  function handleSave() {
+  async function handleSave() {
     if (!selectedFacility) { Alert.alert("Select Facility", "Please choose a target facility."); return; }
     if (!reason.trim()) { Alert.alert("Reason Required", "Please enter the reason for referral."); return; }
     if (!clinicalSummary.trim()) { Alert.alert("Summary Required", "Please enter a clinical summary."); return; }
 
     setSaving(true);
     try {
-      const ref = addReferral({
+      const ref = await addReferral({
         consultationId,
         patientId,
         type: referralType,

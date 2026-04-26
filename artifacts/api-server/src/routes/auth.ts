@@ -34,6 +34,7 @@ import {
   touchSession,
   recordAuditEvent,
   getAuditLog,
+  getDemoTenantId,
 } from "../lib/authStore.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { requireRole } from "../middlewares/rbac.js";
@@ -97,7 +98,123 @@ const createUserSchema = z.object({
   phone: z.string().optional(),
 });
 
+// Self-service signup: Admin role NOT allowed; default tenant assigned
+const registerSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  role: z.enum(["Doctor", "Technician", "CHW", "Viewer", "Patient"]),
+  fullName: z.string().min(2),
+  facility: z.string().min(1),
+  district: z.string().min(1),
+  phone: z.string().optional(),
+  dppaConsent: z.literal(true, { errorMap: () => ({ message: "You must accept the DPPA consent to register" }) }),
+});
+
 const revokeSessionSchema = z.object({ sessionId: z.string().uuid() });
+
+// ── POST /auth/register — public self-service signup ─────────────────────────
+/**
+ * Self-service registration for clinical staff.
+ * Admin role is restricted (must be created by an existing admin).
+ * On success, immediately issues access + refresh tokens and signs the user in.
+ */
+router.post("/register", async (req: Request, res: Response) => {
+  const parse = registerSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: parse.error.issues[0]?.message ?? "Invalid registration data", issues: parse.error.issues });
+    return;
+  }
+
+  const { email, password, role, fullName, facility, district, phone } = parse.data;
+
+  if (findUserByEmail(email)) {
+    res.status(409).json({ error: "An account with this email already exists. Please sign in." });
+    return;
+  }
+
+  const passwordHash = await hashPassword(password);
+  const id = randomUUID();
+  const ip = getClientIp(req);
+  const now = new Date();
+
+  const newUser = {
+    id,
+    tenantId: getDemoTenantId(), // default tenant; multi-tenant onboarding TBD
+    email,
+    passwordHash,
+    role,
+    fullName,
+    facility,
+    district,
+    phone,
+    isActive: true,
+    mfaEnabled: false,
+    mfaSecret: null,
+    mfaPendingSecret: null,
+    dppaConsentAt: now,
+    dppaConsentIp: ip,
+    createdAt: now,
+    lastLoginAt: now,
+  };
+
+  addUser(newUser);
+
+  recordAuditEvent({
+    userId: id,
+    tenantId: newUser.tenantId,
+    event: "user.self_registered",
+    outcome: "success",
+    ipAddress: ip,
+    userAgent: req.headers["user-agent"] ?? "unknown",
+    deviceId: getDeviceId(req),
+    metadata: { email, role, facility, district },
+    dppaCategory: "user_management",
+  });
+
+  // Auto-issue tokens (skip MFA for fresh signups)
+  const deviceId = getDeviceId(req);
+  const accessToken = signAccessToken({
+    sub: id,
+    tenantId: newUser.tenantId,
+    role,
+    deviceId,
+  });
+  const refreshTokenStr = generateRefreshToken();
+  const expiresAt = refreshTokenExpiresAt();
+
+  createSession({
+    userId: id,
+    tenantId: newUser.tenantId,
+    refreshToken: refreshTokenStr,
+    deviceId,
+    deviceName: (req.body?.deviceName as string) ?? "VisionBridge Mobile",
+    devicePlatform: (req.body?.devicePlatform as string) ?? "expo",
+    ipAddress: ip,
+    userAgent: req.headers["user-agent"] ?? "unknown",
+    expiresAt,
+    revokedAt: null,
+  });
+
+  recordAuditEvent({
+    userId: id,
+    tenantId: newUser.tenantId,
+    event: "auth.login",
+    outcome: "success",
+    ipAddress: ip,
+    userAgent: req.headers["user-agent"] ?? "unknown",
+    deviceId,
+    metadata: { source: "registration_auto_login" },
+    dppaCategory: "authentication",
+  });
+
+  res.status(201).json({
+    accessToken,
+    refreshToken: refreshTokenStr,
+    expiresIn: 900,
+    user: sanitizeUser(newUser),
+    permissions: canAccessSummary(role),
+  });
+});
 
 // ── POST /auth/login ─────────────────────────────────────────────────────────
 /**

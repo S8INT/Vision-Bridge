@@ -42,7 +42,7 @@ export default function NewCampaignScreen() {
   const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
   const botPad = Platform.OS === "web" ? 34 : 0;
 
-  function handleSave() {
+  async function handleSave() {
     if (!type) { Alert.alert("Select Type", "Please choose a campaign type."); return; }
     if (!name.trim()) { Alert.alert("Name Required", "Please enter a campaign name."); return; }
     if (!location.trim()) { Alert.alert("Location Required", "Please enter the screening location."); return; }
@@ -52,7 +52,7 @@ export default function NewCampaignScreen() {
 
     setSaving(true);
     try {
-      const campaign = addCampaign({
+      const campaign = await addCampaign({
         name: name.trim(),
         type,
         status: "Planned",

@@ -15,15 +15,6 @@ import { StatusBar } from "expo-status-bar";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
-const DEMO_ACCOUNTS = [
-  { label: "Admin", email: "admin@visionbridge.ug", password: "Admin1234!" },
-  { label: "Doctor", email: "dr.okello@visionbridge.ug", password: "Doctor1234!" },
-  { label: "Technician", email: "sarah.nakato@visionbridge.ug", password: "Tech1234!" },
-  { label: "CHW", email: "chw.mbarara@visionbridge.ug", password: "CHW1234!" },
-  { label: "Viewer", email: "viewer@visionbridge.ug", password: "Viewer1234!" },
-  { label: "Patient", email: "grace.atuhaire@patient.visionbridge.ug", password: "Patient1234!" },
-];
-
 export default function LoginScreen() {
   const colors = useColors();
   const { login } = useAuth();
@@ -31,7 +22,6 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [loadingLabel, setLoadingLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -45,7 +35,6 @@ export default function LoginScreen() {
     });
 
     setLoading(false);
-    setLoadingLabel(null);
 
     if (!result.success) {
       setError(result.error);
@@ -66,14 +55,6 @@ export default function LoginScreen() {
       return;
     }
     await doLogin(email, password);
-  }
-
-  async function handleDemoLogin(account: (typeof DEMO_ACCOUNTS)[number]) {
-    setEmail(account.email);
-    setPassword(account.password);
-    setLoadingLabel(account.label);
-    setError(null);
-    await doLogin(account.email, account.password);
   }
 
   const s = StyleSheet.create({
@@ -125,39 +106,10 @@ export default function LoginScreen() {
     loginBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#fff" },
     dppaNotice: { marginTop: 20, padding: 12, backgroundColor: colors.muted, borderRadius: 8 },
     dppaText: { fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground, lineHeight: 16 },
-    demoSection: { marginTop: 28 },
-    demoTitle: {
-      fontSize: 11, fontFamily: "Inter_500Medium", color: colors.mutedForeground,
-      textAlign: "center", marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.8,
-    },
-    demoRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
-    demoBtn: {
-      paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20,
-      borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card,
-      flexDirection: "row", alignItems: "center", gap: 6,
-      minWidth: 90, justifyContent: "center",
-    },
-    demoBtnActive: { borderColor: colors.primary, backgroundColor: colors.secondary },
-    demoBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.text },
-    demoBtnTextActive: { color: colors.primary },
-    demoBtnBadge: {
-      width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary,
-    },
-    roleChip: {
-      paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
-      backgroundColor: colors.muted,
-    },
-    roleChipText: { fontSize: 10, fontFamily: "Inter_500Medium", color: colors.mutedForeground },
+    signupLink: { alignItems: "center", marginTop: 18, paddingVertical: 6 },
+    signupLinkText: { fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
+    signupLinkAction: { color: colors.primary, fontFamily: "Inter_600SemiBold" },
   });
-
-  const ROLE_COLORS: Record<string, string> = {
-    Admin: "#7c3aed",
-    Doctor: "#0ea5e9",
-    Technician: "#10b981",
-    CHW: "#f59e0b",
-    Viewer: "#64748b",
-    Patient: "#ec4899",
-  };
 
   return (
     <KeyboardAvoidingView
@@ -222,7 +174,7 @@ export default function LoginScreen() {
             onPress={handleLogin}
             disabled={loading}
           >
-            {loading && !loadingLabel ? (
+            {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={s.loginBtnText}>Sign in</Text>
@@ -234,35 +186,17 @@ export default function LoginScreen() {
               By signing in you consent to processing of health data under the Uganda Data Protection and Privacy Act 2019 (DPPA). Data is processed only for clinical screening and referral purposes.
             </Text>
           </View>
-        </View>
 
-        {/* Demo accounts — each logs in directly with its own role */}
-        <View style={s.demoSection}>
-          <Text style={s.demoTitle}>Quick sign-in — demo accounts</Text>
-          <View style={s.demoRow}>
-            {DEMO_ACCOUNTS.map((account) => {
-              const isActive = loadingLabel === account.label;
-              const roleColor = ROLE_COLORS[account.label] ?? colors.primary;
-              return (
-                <TouchableOpacity
-                  key={account.label}
-                  style={[s.demoBtn, isActive && s.demoBtnActive]}
-                  onPress={() => handleDemoLogin(account)}
-                  disabled={loading}
-                  activeOpacity={0.75}
-                >
-                  {isActive ? (
-                    <ActivityIndicator size="small" color={roleColor} />
-                  ) : (
-                    <View style={[s.demoBtnBadge, { backgroundColor: roleColor }]} />
-                  )}
-                  <Text style={[s.demoBtnText, isActive && s.demoBtnTextActive]}>
-                    {account.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <TouchableOpacity
+            style={s.signupLink}
+            onPress={() => router.push("/signup")}
+            disabled={loading}
+          >
+            <Text style={s.signupLinkText}>
+              New to VisionBridge?{" "}
+              <Text style={s.signupLinkAction}>Create an account</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

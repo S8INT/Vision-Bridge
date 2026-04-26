@@ -137,8 +137,8 @@ export default function ConsultationDetailScreen() {
   const isClosed = consultation.status === "Completed" || consultation.status === "Cancelled";
   const statusColor = getStatusColor(consultation.status, colors);
 
-  function handleRoundRobinAssign() {
-    const doc = assignRoundRobin(consultation.id);
+  async function handleRoundRobinAssign() {
+    const doc = await assignRoundRobin(consultation.id);
     if (!doc) {
       Alert.alert("No Available Doctors", "All specialists are currently unavailable. Please assign manually.");
       return;
