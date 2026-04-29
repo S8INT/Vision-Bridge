@@ -121,7 +121,7 @@ const ARTICLES: Article[] = [
       "• Frequent eye rubbing\n" +
       "• Poor school performance\n" +
       "• A white reflection in photos (instead of red eye) — see a doctor URGENTLY\n\n" +
-      "All children should have a vision check by age 4 and again before starting school. Schools regularly host VisionBridge screening days — encourage your child's school to participate.",
+      "All children should have a vision check by age 4 and again before starting school. Schools regularly host Eretina screening days — encourage your child's school to participate.",
   },
   {
     id: "a-006",

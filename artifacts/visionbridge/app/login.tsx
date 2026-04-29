@@ -122,7 +122,7 @@ export default function LoginScreen() {
           <View style={s.logoIcon}>
             <Text style={s.logoIconText}>👁</Text>
           </View>
-          <Text style={s.appName}>VisionBridge</Text>
+          <Text style={s.appName}>Eretina</Text>
           <Text style={s.tagline}>TeleOphthalmology Platform · Uganda</Text>
         </View>
 
@@ -193,7 +193,7 @@ export default function LoginScreen() {
             disabled={loading}
           >
             <Text style={s.signupLinkText}>
-              New to VisionBridge?{" "}
+              New to Eretina?{" "}
               <Text style={s.signupLinkAction}>Create an account</Text>
             </Text>
           </TouchableOpacity>
