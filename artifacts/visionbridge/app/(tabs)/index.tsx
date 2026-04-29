@@ -321,6 +321,9 @@ export default function DashboardScreen() {
               </View>
             </TouchableOpacity>
           )}
+          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push("/profile" as never)}>
+            <Feather name="settings" size={r.iconSize(18)} color={colors.foreground} />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={() => logout()}>
             <Feather name="log-out" size={r.iconSize(18)} color={colors.mutedForeground} />
           </TouchableOpacity>

@@ -105,6 +105,18 @@ function RootLayoutNav() {
         name="campaign/[id]"
         options={{ title: "Campaign" }}
       />
+      <Stack.Screen
+        name="profile"
+        options={{ title: "Profile & Settings", presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="doctor/schedule"
+        options={{ title: "My Schedule", presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="admin/users"
+        options={{ title: "Manage Staff", presentation: "modal" }}
+      />
     </Stack>
   );
 }

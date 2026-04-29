@@ -233,3 +233,15 @@ Per role:
 - `/appointment/[id]` — Appointment detail
 - `/campaign/new` — Create campaign (modal)
 - `/campaign/[id]` — Campaign detail + progress
+- `/profile` — Universal profile + settings (modal). Edit name/phone/facility/district/bio, language, notification prefs, MFA status, sign-out-everywhere; role-aware shortcut tiles (Doctor → schedule, Admin → users, Patient → medical history, CHW/Tech → campaigns)
+- `/doctor/schedule` — Ophthalmologist availability: weekly hours per day, days off, consult length, accepting-new toggle, notes, plus next 5 upcoming appointments (modal)
+- `/admin/users` — Admin staff CRUD: filter by role + search, totals strip, edit/deactivate/delete, "+ user" pageSheet form (full name, email, role, facility, district, phone, active, MFA required) (modal)
+
+## Local-only profile/staff storage
+
+Profile overrides, doctor weekly schedules and the staff directory are persisted in AsyncStorage by `hooks/useProfile.ts`:
+- `vb_profile_overrides` — `{ [userId]: ProfileOverride }`
+- `vb_doctor_schedules` — `{ [doctorId]: WeeklySchedule }`
+- `vb_staff_users` — `StaffUser[]` (seeded once with 6 demo accounts)
+
+These mirror what would normally be `/users` API endpoints; switching to the backend later only requires swapping the hook implementations.
