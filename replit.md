@@ -237,6 +237,23 @@ Per role:
 - `/doctor/schedule` — Ophthalmologist availability: weekly hours per day, days off, consult length, accepting-new toggle, notes, plus next 5 upcoming appointments (modal)
 - `/admin/users` — Admin staff CRUD: filter by role + search, totals strip, edit/deactivate/delete, "+ user" pageSheet form (full name, email, role, facility, district, phone, active, MFA required) (modal)
 
+## Database bootstrap
+
+The API server reads `DATABASE_URL` and, if its required tables are missing,
+silently falls back to MOCK MODE — but routes like `POST /api/patients` and
+the rest of `clinical/*` hard-fail with `503 Database unavailable`. Whenever
+the DB is reset or first provisioned, run:
+
+```
+pnpm --filter @workspace/db run push
+```
+
+then restart the `artifacts/api-server: API Server` workflow. After the push,
+the auth store boots in `DB-backed mode` and signup → patient creation works
+end-to-end. Also note: `POST /api/auth/register` now signs the access token
+with the full `TokenPayload` (including `sessionId`, `email`, `fullName`) so
+fresh signups behave identically to a fresh login.
+
 ## Local-only profile/staff storage
 
 Profile overrides, doctor weekly schedules and the staff directory are persisted in AsyncStorage by `hooks/useProfile.ts`:

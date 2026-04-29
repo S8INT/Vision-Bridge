@@ -173,16 +173,10 @@ router.post("/register", async (req: Request, res: Response) => {
 
   // Auto-issue tokens (skip MFA for fresh signups)
   const deviceId = getDeviceId(req);
-  const accessToken = signAccessToken({
-    sub: id,
-    tenantId: newUser.tenantId,
-    role,
-    deviceId,
-  });
   const refreshTokenStr = generateRefreshToken();
   const expiresAt = refreshTokenExpiresAt();
 
-  createSession({
+  const session = createSession({
     userId: id,
     tenantId: newUser.tenantId,
     refreshToken: refreshTokenStr,
@@ -193,6 +187,16 @@ router.post("/register", async (req: Request, res: Response) => {
     userAgent: req.headers["user-agent"] ?? "unknown",
     expiresAt,
     revokedAt: null,
+  });
+
+  const accessToken = signAccessToken({
+    sub: id,
+    tenantId: newUser.tenantId,
+    role,
+    sessionId: session.id,
+    deviceId,
+    email: newUser.email,
+    fullName: newUser.fullName,
   });
 
   recordAuditEvent({
