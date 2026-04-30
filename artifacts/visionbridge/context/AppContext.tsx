@@ -193,6 +193,12 @@ interface AppContextType {
   appointments: Appointment[];
   campaigns: Campaign[];
 
+  // Sync state — drives the dashboard "Online · Last synced …" banner.
+  isOnline: boolean;
+  isSyncing: boolean;
+  lastSyncAt: string | null;
+  lastSyncError: string | null;
+
   refresh: () => Promise<void>;
 
   addPatient: (p: Omit<Patient, "id" | "registeredAt">) => Promise<Patient | null>;
@@ -270,6 +276,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isOnline, setIsOnline] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [lastSyncError, setLastSyncError] = useState<string | null>(null);
 
   const currentUser: CurrentUser = useMemo(() => {
     if (!user) return FALLBACK_USER;
@@ -306,6 +316,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setReady(false);
       return;
     }
+    setIsSyncing(true);
     try {
       const data = await authedFetch("/clinical/bootstrap");
       setDoctors((data.doctors ?? []).map(normaliseRow));
@@ -317,13 +328,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCampaigns((data.campaigns ?? []).map(normaliseRow));
       setNotifications((data.notifications ?? []).map(normaliseRow));
       setReady(true);
+      setIsOnline(true);
+      setLastSyncAt(new Date().toISOString());
+      setLastSyncError(null);
     } catch (e) {
-      console.warn("[AppContext] bootstrap failed:", (e as Error).message);
+      const msg = (e as Error).message ?? "Unknown error";
+      console.warn("[AppContext] bootstrap failed:", msg);
+      // Network failures (no fetch response) typically surface as "Network request failed".
+      const offline = /Network request failed|Failed to fetch|TypeError/i.test(msg);
+      setIsOnline(!offline);
+      setLastSyncError(msg);
       setReady(true); // unblock UI even on failure — shows empty state
+    } finally {
+      setIsSyncing(false);
     }
   }, [isAuthenticated, accessToken, authedFetch]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Background re-sync every 60s while authenticated, so the dashboard
+  // banner stays accurate without forcing the user to manually refresh.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const id = setInterval(() => { refresh(); }, 60_000);
+    return () => clearInterval(id);
+  }, [isAuthenticated, refresh]);
 
   // ── Mutations ───────────────────────────────────────────────────────────
   const addPatient = useCallback(async (p: Omit<Patient, "id" | "registeredAt">) => {
@@ -491,6 +520,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         currentUser,
         patients, screenings, consultations, notifications,
         doctors, referrals, appointments, campaigns,
+        isOnline, isSyncing, lastSyncAt, lastSyncError,
         refresh,
         addPatient, updatePatient,
         addScreening, updateScreening,

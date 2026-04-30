@@ -262,3 +262,14 @@ Profile overrides, doctor weekly schedules and the staff directory are persisted
 - `vb_staff_users` — `StaffUser[]` (seeded once with 6 demo accounts)
 
 These mirror what would normally be `/users` API endpoints; switching to the backend later only requires swapping the hook implementations.
+
+## Live sync banner
+
+The dashboard's "Online · Last synced …" banner is no longer hardcoded.
+`AppContext` exposes `isOnline`, `isSyncing`, `lastSyncAt`, `lastSyncError`
+and `refresh()`. State is updated inside `refresh()` based on the
+`/clinical/bootstrap` outcome (success → `isOnline=true`, timestamp set;
+network failure → `isOnline=false`). A 60s background interval keeps the
+banner accurate, and `components/SyncBanner.tsx` re-renders every 15s so the
+relative timestamp stays correct ("just now / 2 min ago / 1h ago"). Tapping
+the banner triggers `refresh()`; while syncing it shows a spinner.

@@ -19,6 +19,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { ScreeningCard } from "@/components/ScreeningCard";
 import { ConsultationCard } from "@/components/ConsultationCard";
 import { RoleAnalytics } from "@/components/analytics/RoleAnalytics";
+import { SyncBanner } from "@/components/SyncBanner";
 
 // ── Role metadata displayed at top of each dashboard ─────────────────────────
 
@@ -148,7 +149,7 @@ export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const r = useResponsive();
-  const { patients, screenings, consultations, appointments, unreadCount } = useApp();
+  const { patients, screenings, consultations, appointments, unreadCount, isOnline, isSyncing, lastSyncAt, lastSyncError, refresh } = useApp();
   const { user, logout } = useAuth();
   const statsData = useStatsData();
   // Quick-action grid: 2 cols on phones, 3 on tablets, 4 on wide web.
@@ -236,12 +237,6 @@ export default function DashboardScreen() {
       backgroundColor: colors.destructive,
     },
     badgeText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
-    syncBanner: {
-      flexDirection: "row", alignItems: "center", gap: 8,
-      paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1,
-      backgroundColor: colors.successLight, borderColor: colors.normalBorder,
-    },
-    syncText: { fontSize: 12, fontFamily: "Inter_500Medium", color: colors.normalText },
     statsGrid: { flexDirection: "row", gap: 12 },
     actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
     actionBtn: {
@@ -331,10 +326,14 @@ export default function DashboardScreen() {
       </View>
 
       {/* ── Sync Status ── */}
-      <View style={styles.syncBanner}>
-        <Feather name="wifi" size={14} color={colors.success} />
-        <Text style={styles.syncText}>Online · Last synced 2 min ago</Text>
-      </View>
+      <SyncBanner
+        isOnline={isOnline}
+        isSyncing={isSyncing}
+        lastSyncAt={lastSyncAt}
+        lastSyncError={lastSyncError}
+        onRetry={() => refresh()}
+      />
+
 
       {/* ── Patient: Next visit hero ── */}
       {role === "Patient" && myNextVisit && (
