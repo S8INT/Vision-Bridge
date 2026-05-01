@@ -40,6 +40,8 @@ export interface Patient {
   registeredAt: string;
   lastVisit?: string;
   campaignId?: string;
+  registeredBy?: string;
+  registeredByName?: string;
 }
 
 export interface Screening {

@@ -21,6 +21,8 @@ export const patientsTable = pgTable("patients", {
   registeredAt: timestamp("registered_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   lastVisit: timestamp("last_visit"),
+  registeredBy: uuid("registered_by").references(() => usersTable.id),
+  registeredByName: text("registered_by_name"),
 });
 
 export const insertPatientSchema = createInsertSchema(patientsTable).omit({

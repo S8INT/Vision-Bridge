@@ -94,6 +94,9 @@ export default function PatientDetailScreen() {
           label="Registered"
           value={new Date(patient.registeredAt).toLocaleDateString("en-UG", { year: "numeric", month: "long", day: "numeric" })}
         />
+        {patient.registeredByName ? (
+          <InfoRow label="Registered By" value={patient.registeredByName} />
+        ) : null}
         {patient.lastVisit ? (
           <InfoRow
             label="Last Visit"

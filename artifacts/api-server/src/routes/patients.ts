@@ -15,7 +15,7 @@ import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { db, patientsTable, type Patient } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
-import { recordAuditEvent } from "../lib/authStore.js";
+import { recordAuditEvent, findUserById } from "../lib/authStore.js";
 
 const router: IRouter = Router();
 
@@ -195,24 +195,50 @@ router.post("/", async (req: Request, res: Response) => {
   if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
   if (req.auth.role === "Patient") { res.status(403).json({ error: "Forbidden" }); return; }
   if (!dbAvailable()) { res.status(503).json({ error: "Database unavailable" }); return; }
+
+  const parsed = profileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid patient data", details: parsed.error.issues });
+    return;
+  }
+
   try {
     const body = req.body ?? {};
     const patientId: string = body.patientId
-      || `${(req.auth.tenantId ?? "TNT").slice(0, 3).toUpperCase()}-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+      || generateMrn();
+
+    // Resolve registering clinician's name
+    const registeredByUser = findUserById(req.auth.sub);
+    const registeredByName = registeredByUser?.fullName ?? null;
+
     const [row] = await db!.insert(patientsTable).values({
       tenantId: req.auth.tenantId,
       patientId,
-      firstName: body.firstName,
-      lastName: body.lastName,
-      dateOfBirth: body.dateOfBirth,
-      sex: body.sex,
-      phone: body.phone,
-      village: body.village,
-      district: body.district,
-      medicalHistory: body.medicalHistory ?? [],
-      campaignId: body.campaignId ?? null,
+      firstName: parsed.data.firstName,
+      lastName: parsed.data.lastName,
+      dateOfBirth: parsed.data.dateOfBirth ?? null,
+      sex: parsed.data.sex ?? null,
+      phone: parsed.data.phone ?? null,
+      village: parsed.data.village ?? null,
+      district: parsed.data.district ?? null,
+      medicalHistory: parsed.data.medicalHistory ?? [],
       lastVisit: body.lastVisit ? new Date(body.lastVisit) : null,
+      registeredBy: req.auth.sub,
+      registeredByName,
     }).returning();
+
+    recordAuditEvent({
+      userId: req.auth.sub,
+      tenantId: req.auth.tenantId,
+      event: "patient.record.created",
+      outcome: "success",
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"] ?? null,
+      deviceId: null,
+      metadata: { patientId: row.patientId, registeredByName },
+      dppaCategory: "clinician_patient_registration",
+    });
+
     res.status(201).json({ item: row });
   } catch (err) {
     console.error("[patients] POST / failed:", err);

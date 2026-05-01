@@ -102,29 +102,51 @@ export default function RegisterPatientScreen() {
     return `MBR-${year}-${seq}`;
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!firstName.trim() || !lastName.trim() || !dob.trim()) {
       Alert.alert("Required Fields", "Please fill in first name, last name, and date of birth.");
       return;
     }
+
+    // Basic DOB format check
+    const dobRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dobRegex.test(dob.trim())) {
+      Alert.alert("Invalid Date", "Please enter date of birth as YYYY-MM-DD (e.g. 1985-06-15).");
+      return;
+    }
+
     setSaving(true);
     try {
-      addPatient({
+      const result = await addPatient({
         patientId: generatePatientId(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         dateOfBirth: dob.trim(),
         sex,
-        phone: phone.trim(),
+        phone: phone.trim() || "",
         village: village.trim() || "Unknown",
         district: district.trim() || "Mbarara",
         medicalHistory: selectedConditions,
         lastVisit: new Date().toISOString(),
       });
+
+      if (!result) {
+        Alert.alert(
+          "Registration Failed",
+          "Could not save the patient record. Please check your connection and try again."
+        );
+        return;
+      }
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.back();
-    } catch {
+      Alert.alert(
+        "Patient Registered",
+        `${firstName.trim()} ${lastName.trim()} has been successfully registered with MRN: ${result.patientId}.`,
+        [{ text: "OK", onPress: () => router.back() }]
+      );
+    } catch (e) {
       Alert.alert("Error", "Failed to register patient. Please try again.");
+      console.error("[RegisterPatient]", e);
     } finally {
       setSaving(false);
     }
