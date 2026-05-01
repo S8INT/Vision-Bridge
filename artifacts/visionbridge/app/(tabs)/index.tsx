@@ -117,9 +117,10 @@ function useStatsData() {
   return useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
 
-    // For patient: find their patient record by full name (demo linkage)
+    // For patient: find their record by userId (reliable) or fall back to name match
     const myPatient = user?.role === "Patient"
-      ? patients.find((p) => `${p.firstName} ${p.lastName}` === user.fullName)
+      ? patients.find((p) => p.userId === user.id) ??
+        patients.find((p) => `${p.firstName} ${p.lastName}` === user.fullName)
       : undefined;
 
     const myScreenings = myPatient ? screenings.filter((s) => s.patientId === myPatient.id) : [];
@@ -160,9 +161,10 @@ export default function DashboardScreen() {
   const quickActions = ROLE_ACTIONS[role];
   const statDefs = ROLE_STATS[role];
 
-  // Patient-specific data
+  // Patient-specific data — match by userId first, fall back to name
   const myPatient = role === "Patient"
-    ? patients.find((p) => `${p.firstName} ${p.lastName}` === user?.fullName)
+    ? patients.find((p) => p.userId === user?.id) ??
+      patients.find((p) => `${p.firstName} ${p.lastName}` === user?.fullName)
     : undefined;
 
   const myNextVisit = useMemo(() => {

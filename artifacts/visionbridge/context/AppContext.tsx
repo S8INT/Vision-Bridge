@@ -28,6 +28,7 @@ export type CampaignStatus = "Planned" | "Active" | "Completed" | "Cancelled";
 
 export interface Patient {
   id: string;
+  userId?: string;
   patientId: string;
   firstName: string;
   lastName: string;

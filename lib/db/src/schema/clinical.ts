@@ -68,7 +68,7 @@ export type Screening = typeof screeningsTable.$inferSelect;
 export const consultationsTable = pgTable("consultations", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
-  screeningId: uuid("screening_id").notNull().references(() => screeningsTable.id),
+  screeningId: uuid("screening_id").references(() => screeningsTable.id),
   patientId: uuid("patient_id").notNull().references(() => patientsTable.id),
   campaignId: uuid("campaign_id").references(() => campaignsTable.id),
   requestedBy: text("requested_by").notNull(),
