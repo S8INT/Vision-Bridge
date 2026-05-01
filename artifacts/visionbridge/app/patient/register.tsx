@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useApp, PatientSex } from "@/context/AppContext";
+import { DateInput } from "@/components/ui/DateInput";
 
 const MEDICAL_CONDITIONS = [
   "Diabetes Type 1",
@@ -108,10 +109,19 @@ export default function RegisterPatientScreen() {
       return;
     }
 
-    // Basic DOB format check
-    const dobRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dobRegex.test(dob.trim())) {
-      Alert.alert("Invalid Date", "Please enter date of birth as YYYY-MM-DD (e.g. 1985-06-15).");
+    // Validate date of birth (must be YYYY-MM-DD with valid ranges)
+    const dobParts = dob.split("-");
+    const yyyy = parseInt(dobParts[0], 10);
+    const mm = parseInt(dobParts[1], 10);
+    const dd = parseInt(dobParts[2], 10);
+    const currentYear = new Date().getFullYear();
+    if (
+      isNaN(yyyy) || isNaN(mm) || isNaN(dd) ||
+      mm < 1 || mm > 12 ||
+      dd < 1 || dd > 31 ||
+      yyyy < 1900 || yyyy > currentYear
+    ) {
+      Alert.alert("Invalid Date", "Please enter a valid date of birth using the Day / Month / Year fields.");
       return;
     }
 
@@ -170,8 +180,12 @@ export default function RegisterPatientScreen() {
         <InputField value={firstName} onChangeText={setFirstName} placeholder="Grace" />
         <FieldLabel label="Last Name" required />
         <InputField value={lastName} onChangeText={setLastName} placeholder="Atuhaire" />
-        <FieldLabel label="Date of Birth (YYYY-MM-DD)" required />
-        <InputField value={dob} onChangeText={setDob} placeholder="1985-06-15" keyboardType="numeric" autoCapitalize="none" />
+        <DateInput
+          label="Date of Birth"
+          required
+          value={dob}
+          onChange={setDob}
+        />
         <FieldLabel label="Sex" required />
         <View style={styles.segmentRow}>
           {(["F", "M", "Other"] as PatientSex[]).map((s) => (
