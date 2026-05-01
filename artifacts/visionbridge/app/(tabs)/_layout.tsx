@@ -127,22 +127,36 @@ function ClassicTabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.mutedForeground,
+        tabBarInactiveTintColor: "#94a3b8",
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : colors.background,
-          borderTopWidth: isWeb ? 1 : 0,
+          backgroundColor: isIOS ? "transparent" : "#ffffff",
+          borderTopWidth: 1,
           borderTopColor: colors.border,
-          elevation: 0,
-          ...(isWeb ? { height: 84 } : {}),
+          elevation: 12,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -3 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+          height: isWeb ? 84 : 68,
+          paddingBottom: isWeb ? 16 : 8,
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: "600",
+          marginTop: 2,
+        },
+        tabBarIconStyle: {
+          marginTop: 2,
         },
         tabBarBackground: () =>
           isIOS ? (
-            <BlurView intensity={100} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-          ) : isWeb ? (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
-          ) : null,
+            <BlurView intensity={80} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: "#ffffff", borderTopLeftRadius: 16, borderTopRightRadius: 16 }]} />
+          ),
       }}
     >
       {/* 1. Home — always first */}
@@ -151,7 +165,7 @@ function ClassicTabLayout() {
         options={{
           title: role === "Patient" ? "Home" : "Dashboard",
           tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="house" tintColor={color} size={24} /> : <Feather name="home" size={22} color={color} />,
+            isIOS ? <SymbolView name="house" tintColor={color} size={24} /> : <Feather name="home" size={24} color={color} />,
         }}
       />
 
@@ -162,7 +176,7 @@ function ClassicTabLayout() {
           title: "Patients",
           ...(showPatients ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="person.2" tintColor={color} size={24} /> : <Feather name="users" size={22} color={color} />,
+            isIOS ? <SymbolView name="person.2" tintColor={color} size={24} /> : <Feather name="users" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -171,7 +185,7 @@ function ClassicTabLayout() {
           title: "Visits",
           ...(showVisits ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="calendar" tintColor={color} size={24} /> : <Feather name="calendar" size={22} color={color} />,
+            isIOS ? <SymbolView name="calendar" tintColor={color} size={24} /> : <Feather name="calendar" size={24} color={color} />,
         }}
       />
 
@@ -182,7 +196,7 @@ function ClassicTabLayout() {
           title: "Consults",
           ...(showConsultations ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="message.circle" tintColor={color} size={24} /> : <Feather name="message-circle" size={22} color={color} />,
+            isIOS ? <SymbolView name="message.circle" tintColor={color} size={24} /> : <Feather name="message-circle" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -191,7 +205,7 @@ function ClassicTabLayout() {
           title: "Reports",
           ...(showReports ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="doc.text" tintColor={color} size={24} /> : <Feather name="file-text" size={22} color={color} />,
+            isIOS ? <SymbolView name="doc.text" tintColor={color} size={24} /> : <Feather name="file-text" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -200,7 +214,7 @@ function ClassicTabLayout() {
           title: "Learn",
           ...(showEducation ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="book" tintColor={color} size={24} /> : <Feather name="book-open" size={22} color={color} />,
+            isIOS ? <SymbolView name="book" tintColor={color} size={24} /> : <Feather name="book-open" size={24} color={color} />,
         }}
       />
 
@@ -211,7 +225,7 @@ function ClassicTabLayout() {
           title: "Campaigns",
           ...(showCampaigns ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="map" tintColor={color} size={24} /> : <Feather name="map-pin" size={22} color={color} />,
+            isIOS ? <SymbolView name="map" tintColor={color} size={24} /> : <Feather name="map-pin" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -220,7 +234,7 @@ function ClassicTabLayout() {
           title: "Analytics",
           ...(showAnalytics ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="chart.bar" tintColor={color} size={24} /> : <Feather name="bar-chart-2" size={22} color={color} />,
+            isIOS ? <SymbolView name="chart.bar" tintColor={color} size={24} /> : <Feather name="bar-chart-2" size={24} color={color} />,
         }}
       />
 
@@ -231,7 +245,7 @@ function ClassicTabLayout() {
           title: "Alerts",
           ...(showNotifications ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="bell" tintColor={color} size={24} /> : <Feather name="bell" size={22} color={color} />,
+            isIOS ? <SymbolView name="bell" tintColor={color} size={24} /> : <Feather name="bell" size={24} color={color} />,
           tabBarBadge: showNotifications && unreadCount > 0 ? unreadCount : undefined,
         }}
       />
