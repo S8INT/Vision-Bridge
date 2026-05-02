@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
@@ -39,8 +40,19 @@ async function registerForPushNotifications(): Promise<string | null> {
 
   if (finalStatus !== "granted") return null;
 
-  const tokenData = await Notifications.getExpoPushTokenAsync();
-  return tokenData.data;
+  const projectId: string | undefined =
+    Constants.easConfig?.projectId ??
+    (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
+
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
+    return tokenData.data;
+  } catch (pushErr) {
+    console.warn("[push] getExpoPushTokenAsync failed (no EAS project configured):", pushErr);
+    return null;
+  }
 }
 
 async function savePushToken(token: string, accessToken: string): Promise<void> {
