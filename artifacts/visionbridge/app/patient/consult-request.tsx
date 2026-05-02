@@ -18,7 +18,7 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useColors } from "@/hooks/useColors";
 import { useResponsive } from "@/hooks/useResponsive";
-import { useApp, type Patient } from "@/context/AppContext";
+import { useApp, type Patient, type Doctor } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 
 const SPECIALTIES = [
@@ -48,10 +48,11 @@ export default function ConsultRequestScreen() {
   const specialtyMinWidth = `${Math.floor(100 / Math.min(r.cols, 3)) - 2}%` as const;
 
   const { user, accessToken } = useAuth();
-  const { patients, doctors, screenings, addConsultation, addNotification } = useApp();
+  const { patients, screenings } = useApp();
+
+  const API_BASE = `${process.env["EXPO_PUBLIC_API_URL"] ?? ""}/api`;
 
   // ── Find patient record ────────────────────────────────────────────────────
-  // First try local state (by userId, then by name), then fetch from API
   const localPatient = useMemo(
     () =>
       patients.find((p) => p.userId === user?.id) ??
@@ -63,22 +64,25 @@ export default function ConsultRequestScreen() {
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  // ── Load available ophthalmologists (cross-tenant) ─────────────────────────
+  const [availableDoctors, setAvailableDoctors] = useState<Doctor[]>([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
+
+  // ── Fetch patient profile ──────────────────────────────────────────────────
   useEffect(() => {
     if (localPatient) {
       setMyPatient(localPatient);
       return;
     }
-    // Not in local list → fetch from /api/patients/me (works for self-registered patients)
     if (!accessToken) return;
     setLoadingProfile(true);
-    const API_BASE = `${process.env["EXPO_PUBLIC_API_URL"] ?? ""}/api`;
     fetch(`${API_BASE}/patients/me`, {
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     })
       .then(async (res) => {
         if (res.ok) {
           const data = await res.json();
-          // Normalise nulls → undefined to match Patient interface
           const row: Patient = data.patient;
           Object.keys(row).forEach((k) => {
             if ((row as any)[k] === null) (row as any)[k] = undefined;
@@ -93,6 +97,26 @@ export default function ConsultRequestScreen() {
       .catch(() => setProfileError("fetch_failed"))
       .finally(() => setLoadingProfile(false));
   }, [localPatient, accessToken]);
+
+  // ── Fetch available doctors across all tenants ─────────────────────────────
+  useEffect(() => {
+    if (!accessToken) return;
+    setLoadingDoctors(true);
+    fetch(`${API_BASE}/clinical/ophthalmologists`, {
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          setAvailableDoctors((data.items ?? []).map((d: any) => {
+            Object.keys(d).forEach((k) => { if (d[k] === null) d[k] = undefined; });
+            return d as Doctor;
+          }));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingDoctors(false));
+  }, [accessToken]);
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [specialty, setSpecialty] = useState<typeof SPECIALTIES[number]["id"]>("general");
@@ -142,55 +166,53 @@ export default function ConsultRequestScreen() {
     if (otherSymptoms.trim()) allSymptoms.push(otherSymptoms.trim());
 
     const specialtyLabel = SPECIALTIES.find((s) => s.id === specialty)?.label ?? "General Eye Care";
-
-    // Use existing screening if available — otherwise proceed without one (nullable)
     const myScreening = screenings.find((s) => s.patientId === myPatient.id);
 
-    let consultation;
+    const body: Record<string, any> = {
+      priority,
+      clinicalNotes: `Patient-requested ${specialtyLabel} consultation.\n\nSymptoms: ${allSymptoms.join(", ")}.${imageUri ? "\n\nPatient attached an eye image." : ""}`,
+      screeningId: myScreening?.id ?? null,
+    };
+    if (selectedDoctorId) body.preferredDoctorId = selectedDoctorId;
+
     try {
-      consultation = await addConsultation({
-        screeningId: myScreening?.id ?? null,
-        patientId: myPatient.id,
-        requestedBy: user?.id ?? "patient",
-        status: "Pending",
-        priority,
-        clinicalNotes: `Patient-requested ${specialtyLabel} consultation.\n\nSymptoms: ${allSymptoms.join(", ")}.${imageUri ? "\n\nPatient attached an eye image." : ""}`,
-      } as any);
-    } catch {
-      setSubmitting(false);
+      const res = await fetch(`${API_BASE}/clinical/patient-consult`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (err.code === "NO_PROFILE") {
+          setSubmitting(false);
+          Alert.alert("No Patient Profile", "Please create your patient profile first.", [
+            { text: "Create Profile", onPress: () => router.push("/patient/register") },
+            { text: "Cancel", style: "cancel" },
+          ]);
+          return;
+        }
+        throw new Error(err.error ?? "Submit failed");
+      }
+
+      const data = await res.json();
+      const assigned: Doctor | null = data.assignedDoctor ?? null;
+
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      Alert.alert(
+        "Request Submitted ✓",
+        `Your consultation request has been received.\n\n` +
+        `Patient ID: ${myPatient.patientId}\n` +
+        (assigned ? `${assigned.name} (${assigned.specialty}) will review your case.\n\n` : "") +
+        `You will be notified when a specialist responds.`,
+        [{ text: "OK", onPress: () => router.replace("/(tabs)") }],
+      );
+    } catch (e) {
       Alert.alert("Submit Failed", "Could not send your request. Please try again.");
-      return;
-    }
-
-    if (!consultation) {
+    } finally {
       setSubmitting(false);
-      Alert.alert("Submit Failed", "Could not send your request. Please check your connection and try again.");
-      return;
     }
-
-    // Notify patient — round-robin assign to available doctor if any
-    const assigned = doctors.find((d) => d.isAvailable);
-    await addNotification({
-      type: "ConsultationUpdate",
-      title: "Consultation Request Received",
-      body: `Your ${specialtyLabel.toLowerCase()} request has been submitted. ${
-        assigned ? `${assigned.name} will respond shortly.` : "A specialist will respond shortly."
-      }`,
-      patientId: myPatient.id,
-      consultationId: consultation.id,
-    });
-
-    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-    Alert.alert(
-      "Request Submitted ✓",
-      `Your consultation request has been received.\n\n` +
-      `Patient ID: ${myPatient.patientId}\n` +
-      (assigned ? `${assigned.name} (${assigned.specialty}) will review your case.\n\n` : "") +
-      `You will be notified when a specialist responds.`,
-      [{ text: "OK", onPress: () => router.replace("/(tabs)") }],
-    );
-    setSubmitting(false);
   };
 
   const s = StyleSheet.create({
@@ -203,7 +225,6 @@ export default function ConsultRequestScreen() {
       backgroundColor: colors.muted, borderWidth: 1, borderColor: colors.border,
     },
     introText: { flex: 1, fontSize: 13, color: colors.foreground, lineHeight: 19 },
-    // Patient ID badge
     idBadge: {
       flexDirection: "row", alignItems: "center", gap: 10, padding: 14,
       borderRadius: 12, backgroundColor: "#f0f9ff",
@@ -212,7 +233,6 @@ export default function ConsultRequestScreen() {
     idLabel: { fontSize: 12, fontWeight: "600", color: "#0369a1" },
     idValue: { fontSize: 16, fontWeight: "700", color: "#0284c7" },
     idSub: { fontSize: 11, color: "#64748b", marginTop: 1 },
-    // Loading / error states
     center: { alignItems: "center", justifyContent: "center", padding: 40, gap: 12 },
     loadingText: { fontSize: 14, color: colors.mutedForeground },
     errorCard: {
@@ -226,7 +246,6 @@ export default function ConsultRequestScreen() {
       borderRadius: 10, backgroundColor: "#0ea5e9",
     },
     errorBtnText: { color: "#fff", fontWeight: "600", fontSize: 14 },
-    // Form options
     optionsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
     optionCard: {
       flexBasis: specialtyMinWidth, flexGrow: 1,
@@ -263,6 +282,30 @@ export default function ConsultRequestScreen() {
       backgroundColor: colors.card,
     },
     imagePreview: { width: "100%", height: 180, borderRadius: 10 },
+    doctorCard: {
+      flexDirection: "row", alignItems: "center", gap: 12, padding: 14,
+      borderRadius: 12, borderWidth: 1.5,
+      backgroundColor: colors.card, borderColor: colors.border,
+      marginBottom: 8,
+    },
+    doctorCardActive: { borderColor: colors.primary, backgroundColor: `${colors.primary}10` },
+    doctorAvatar: {
+      width: 40, height: 40, borderRadius: 20,
+      backgroundColor: colors.muted, alignItems: "center", justifyContent: "center",
+    },
+    doctorName: { fontSize: 14, fontWeight: "600", color: colors.foreground },
+    doctorMeta: { fontSize: 12, color: colors.mutedForeground, marginTop: 2 },
+    doctorBadge: {
+      paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20,
+      backgroundColor: "#dcfce7",
+    },
+    doctorBadgeText: { fontSize: 10, fontWeight: "600", color: "#166534" },
+    autoAssignNote: {
+      flexDirection: "row", gap: 8, padding: 12, borderRadius: 10,
+      backgroundColor: colors.muted, borderWidth: 1, borderColor: colors.border,
+      alignItems: "flex-start",
+    },
+    autoAssignText: { flex: 1, fontSize: 12, color: colors.mutedForeground, lineHeight: 17 },
     submitBtn: {
       backgroundColor: colors.primary, paddingVertical: 15, borderRadius: 12,
       alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8,
@@ -272,7 +315,6 @@ export default function ConsultRequestScreen() {
     cancelText: { fontSize: 14, fontWeight: "500", color: colors.mutedForeground },
   });
 
-  // ── Loading state ──────────────────────────────────────────────────────────
   if (loadingProfile) {
     return (
       <View style={[s.container, s.center]}>
@@ -282,7 +324,6 @@ export default function ConsultRequestScreen() {
     );
   }
 
-  // ── No profile at all ──────────────────────────────────────────────────────
   if (!loadingProfile && !myPatient && profileError === "no_profile") {
     return (
       <ScrollView style={s.container} contentContainerStyle={[s.content, s.center]}>
@@ -301,7 +342,6 @@ export default function ConsultRequestScreen() {
     );
   }
 
-  // ── Fetch error ────────────────────────────────────────────────────────────
   if (!loadingProfile && !myPatient && profileError === "fetch_failed") {
     return (
       <ScrollView style={s.container} contentContainerStyle={[s.content, s.center]}>
@@ -319,14 +359,12 @@ export default function ConsultRequestScreen() {
     );
   }
 
-  // ── Main form ──────────────────────────────────────────────────────────────
   return (
     <ScrollView
       style={s.container}
       contentContainerStyle={s.content}
       keyboardShouldPersistTaps="handled"
     >
-      {/* Patient ID badge — always visible so patient knows their ID */}
       {myPatient && (
         <View style={s.idBadge}>
           <Feather name="credit-card" size={22} color="#0284c7" />
@@ -413,6 +451,58 @@ export default function ConsultRequestScreen() {
           placeholderTextColor={colors.mutedForeground}
           multiline
         />
+      </View>
+
+      {/* Choose a doctor (optional) */}
+      <View>
+        <Text style={s.sectionLabel}>Choose a specialist (optional)</Text>
+        {loadingDoctors ? (
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 8 }} />
+        ) : availableDoctors.length === 0 ? (
+          <View style={s.autoAssignNote}>
+            <Feather name="info" size={14} color={colors.mutedForeground} />
+            <Text style={s.autoAssignText}>
+              Your request will be automatically assigned to the next available ophthalmologist.
+            </Text>
+          </View>
+        ) : (
+          <>
+            <View style={s.autoAssignNote}>
+              <Feather name="info" size={14} color={colors.mutedForeground} />
+              <Text style={s.autoAssignText}>
+                Pick a specific specialist, or leave unselected to be automatically matched.
+              </Text>
+            </View>
+            <View style={{ marginTop: 10 }}>
+              {availableDoctors.map((doc) => {
+                const active = selectedDoctorId === doc.id;
+                return (
+                  <TouchableOpacity
+                    key={doc.id}
+                    style={[s.doctorCard, active && s.doctorCardActive]}
+                    onPress={() => setSelectedDoctorId(active ? null : doc.id)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={s.doctorAvatar}>
+                      <Feather name="user" size={20} color={active ? colors.primary : colors.mutedForeground} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.doctorName}>{doc.name}</Text>
+                      <Text style={s.doctorMeta}>{doc.specialty} · {doc.clinic}</Text>
+                      <Text style={[s.doctorMeta, { marginTop: 1 }]}>{doc.district}</Text>
+                    </View>
+                    <View style={s.doctorBadge}>
+                      <Text style={s.doctorBadgeText}>Available</Text>
+                    </View>
+                    {active && (
+                      <Feather name="check-circle" size={18} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
       </View>
 
       {/* Image */}

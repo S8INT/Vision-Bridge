@@ -1,7 +1,9 @@
 /**
  * Clinical data routes — full CRUD for the operational dashboard.
  *
- *   GET  /api/clinical/bootstrap   - one-shot fetch of everything for current tenant
+ *   GET  /api/clinical/bootstrap         - one-shot fetch of everything for current tenant
+ *   GET  /api/clinical/ophthalmologists  - all available doctors (cross-tenant, for patient use)
+ *   POST /api/clinical/patient-consult   - patient-initiated consultation (cross-tenant safe)
  *
  * Per-entity:
  *   GET  /doctors                  POST /doctors             PATCH /doctors/:id
@@ -15,7 +17,7 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import {
   db, patientsTable, doctorsTable, screeningsTable, consultationsTable,
   referralsTable, appointmentsTable, campaignsTable, notificationsTable,
@@ -89,6 +91,98 @@ function makePatchRoute(table: any) {
     } catch (e) { console.error(e); res.status(400).json({ error: "Failed to update", detail: String(e) }); }
   };
 }
+
+// ── Ophthalmologists: all available doctors across all tenants (patient-facing) ──
+router.get("/ophthalmologists", async (req: Request, res: Response) => {
+  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
+  if (!requireDb(res)) return;
+  try {
+    const rows = await db!.select().from(doctorsTable).where(eq(doctorsTable.isAvailable, true));
+    res.json({ items: rows });
+  } catch (err) {
+    console.error("[clinical] ophthalmologists failed:", err);
+    res.status(500).json({ error: "Failed to load available doctors" });
+  }
+});
+
+// ── Patient-initiated consultation (safe for patients not linked to any clinic) ──
+router.post("/patient-consult", async (req: Request, res: Response) => {
+  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
+  if (!requireDb(res)) return;
+
+  try {
+    // Verify the patient profile belongs to this user
+    const patientRows = await db!.select().from(patientsTable)
+      .where(eq(patientsTable.userId, req.auth.sub))
+      .limit(1);
+
+    const patient = patientRows[0];
+    if (!patient) {
+      res.status(404).json({ error: "No patient profile found. Please create your profile first.", code: "NO_PROFILE" });
+      return;
+    }
+
+    // Auto-assign to least-loaded available doctor (round-robin, cross-tenant)
+    const availableDoctors = await db!.select().from(doctorsTable)
+      .where(eq(doctorsTable.isAvailable, true));
+
+    let assignedDoctor = availableDoctors.length > 0
+      ? availableDoctors.reduce((min, d) => (d.totalAssigned < min.totalAssigned ? d : min), availableDoctors[0])
+      : null;
+
+    // If a specific doctor was requested and they're available, prefer them
+    if (req.body.preferredDoctorId) {
+      const preferred = availableDoctors.find((d) => d.id === req.body.preferredDoctorId);
+      if (preferred) assignedDoctor = preferred;
+    }
+
+    const values = {
+      tenantId: patient.tenantId,
+      patientId: patient.id,
+      requestedBy: req.auth.sub,
+      requestedAt: new Date(),
+      status: "Pending" as const,
+      priority: req.body.priority ?? "Routine",
+      clinicalNotes: req.body.clinicalNotes ?? null,
+      screeningId: req.body.screeningId ?? null,
+      ...(assignedDoctor ? {
+        assignedDoctorId: assignedDoctor.id,
+        assignedTo: assignedDoctor.name,
+        assignedAt: new Date(),
+        assignmentMethod: "RoundRobin" as const,
+        status: "Assigned" as const,
+      } : {}),
+    };
+
+    const [consultation] = await db!.insert(consultationsTable).values(values).returning();
+
+    // Increment doctor's totalAssigned counter
+    if (assignedDoctor) {
+      await db!.update(doctorsTable)
+        .set({ totalAssigned: assignedDoctor.totalAssigned + 1 })
+        .where(eq(doctorsTable.id, assignedDoctor.id));
+    }
+
+    // Create a notification for the patient
+    await db!.insert(notificationsTable).values({
+      tenantId: patient.tenantId,
+      type: "ConsultationUpdate",
+      title: "Consultation Request Received",
+      body: assignedDoctor
+        ? `Your request has been submitted and assigned to ${assignedDoctor.name}.`
+        : "Your request has been submitted. A specialist will respond shortly.",
+      read: false,
+      createdAt: new Date(),
+      patientId: patient.id,
+      consultationId: consultation.id,
+    });
+
+    res.status(201).json({ item: consultation, assignedDoctor: assignedDoctor ?? null });
+  } catch (err) {
+    console.error("[clinical] patient-consult failed:", err);
+    res.status(400).json({ error: "Failed to submit consultation request", detail: String(err) });
+  }
+});
 
 // ── Wire entities ───────────────────────────────────────────────────────────
 router.get("/doctors",        makeListRoute(doctorsTable));
