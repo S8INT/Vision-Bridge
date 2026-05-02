@@ -432,10 +432,28 @@ export async function uploadRetinalImage(
 
   onProgress?.(10);
 
-  const response = await fetch(`${API_BASE}/imaging/upload`, {
-    method: "POST",
-    body: formData,
-  });
+  // Native fetch has no upload-progress API, so we simulate smooth progress
+  // from 10 → 74 % while the request is in-flight, then let the real
+  // milestones (80 on response, 100 on parse) complete the bar.
+  let simPct = 10;
+  const simTimer = onProgress
+    ? setInterval(() => {
+        // Ease in: fast early, slow near the cap so it never reaches 75 before real response
+        const step = simPct < 40 ? 5 + Math.random() * 5 : simPct < 60 ? 2 + Math.random() * 3 : 0.5 + Math.random();
+        simPct = Math.min(simPct + step, 74);
+        onProgress(Math.round(simPct));
+      }, 350)
+    : null;
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/imaging/upload`, {
+      method: "POST",
+      body: formData,
+    });
+  } finally {
+    if (simTimer !== null) clearInterval(simTimer);
+  }
 
   onProgress?.(80);
 
