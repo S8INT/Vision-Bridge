@@ -23,6 +23,8 @@ import {
   referralsTable, appointmentsTable, campaignsTable, notificationsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
+import { findUserById } from "../lib/authStore.js";
+import { sendExpoPush } from "../lib/push.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -215,7 +217,75 @@ router.patch("/screenings/:id", makePatchRoute(screeningsTable));
 
 router.get("/consultations",       makeListRoute(consultationsTable));
 router.post("/consultations",      makeCreateRoute(consultationsTable, () => ({ requestedAt: new Date() })));
-router.patch("/consultations/:id", makePatchRoute(consultationsTable));
+
+// Smart PATCH for consultations — fires a push notification to the patient
+// when a specialist adds a response or moves status to Reviewed/Completed.
+router.patch("/consultations/:id", async (req: Request, res: Response) => {
+  if (!req.auth) { res.status(401).end(); return; }
+  if (!requireDb(res)) return;
+  const { id } = req.params;
+  try {
+    const [row] = await db!.update(consultationsTable).set(req.body).where(eq(consultationsTable.id, id)).returning();
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    res.json({ item: row });
+
+    // ── Fire push notification to patient (best-effort, non-blocking) ──
+    const triggersNotification =
+      req.body.specialistResponse ||
+      req.body.status === "Reviewed" ||
+      req.body.status === "Completed";
+
+    if (triggersNotification && row.patientId) {
+      (async () => {
+        try {
+          const patientRows = await db!.select().from(patientsTable)
+            .where(eq(patientsTable.id, row.patientId))
+            .limit(1);
+          const patient = patientRows[0];
+          if (!patient?.userId) return;
+
+          const user = findUserById(patient.userId);
+          if (!user?.pushToken) return;
+
+          let title = "Consultation Update";
+          let body = "Your consultation status has been updated.";
+
+          if (req.body.specialistResponse) {
+            title = "Specialist Response Received";
+            body = "Your specialist has reviewed your case and left a response. Tap to read it.";
+          } else if (req.body.status === "Reviewed") {
+            title = "Consultation Reviewed";
+            body = "Your consultation has been reviewed by a specialist.";
+          } else if (req.body.status === "Completed") {
+            title = "Consultation Completed";
+            body = "Your consultation is now complete. Tap to view the outcome.";
+          }
+
+          await sendExpoPush({
+            token: user.pushToken,
+            title,
+            body,
+            data: { consultationId: row.id, screen: "my-consultations" },
+          });
+
+          // Also create an in-app notification record
+          await db!.insert(notificationsTable).values({
+            tenantId: row.tenantId,
+            type: "ConsultationUpdate",
+            title,
+            body,
+            read: false,
+            createdAt: new Date(),
+            patientId: row.patientId,
+            consultationId: row.id,
+          });
+        } catch (notifErr) {
+          console.error("[clinical] push notification failed (non-fatal):", notifErr);
+        }
+      })();
+    }
+  } catch (e) { console.error(e); res.status(400).json({ error: "Failed to update", detail: String(e) }); }
+});
 
 router.get("/referrals",       makeListRoute(referralsTable));
 router.post("/referrals",      makeCreateRoute(referralsTable, () => ({ createdAt: new Date() })));

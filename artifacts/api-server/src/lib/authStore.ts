@@ -44,6 +44,7 @@ export interface StoredUser {
   mfaPendingSecret: string | null;
   dppaConsentAt: Date | null;
   dppaConsentIp: string | null;
+  pushToken: string | null;
   createdAt: Date;
   lastLoginAt: Date | null;
 }
@@ -273,6 +274,7 @@ export function updateUser(id: string, patch: Partial<StoredUser>): StoredUser |
     if (patch.mfaPendingSecret !== undefined) dbPatch.mfaPendingSecret = patch.mfaPendingSecret;
     if (patch.dppaConsentAt !== undefined) dbPatch.dppaConsentAt = patch.dppaConsentAt;
     if (patch.dppaConsentIp !== undefined) dbPatch.dppaConsentIp = patch.dppaConsentIp;
+    if (patch.pushToken !== undefined) dbPatch.pushToken = patch.pushToken;
     if (patch.lastLoginAt !== undefined) dbPatch.lastLoginAt = patch.lastLoginAt;
     dbPatch.updatedAt = new Date();
 

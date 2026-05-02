@@ -973,4 +973,16 @@ function canAccessSummary(role: import("../lib/rbac.js").Role): PermissionSummar
   return result;
 }
 
+// ── Push notification token registration ──────────────────────────────────────
+router.put("/push-token", requireAuth, (req: Request, res: Response) => {
+  if (!req.auth) { res.status(401).end(); return; }
+  const { token } = req.body as { token?: string };
+  if (!token || typeof token !== "string") {
+    res.status(400).json({ error: "token is required" });
+    return;
+  }
+  updateUser(req.auth.sub, { pushToken: token });
+  res.json({ ok: true });
+});
+
 export default router;

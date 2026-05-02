@@ -29,6 +29,7 @@ export const usersTable = pgTable("users", {
   mfaPendingSecret: text("mfa_pending_secret"),
   dppaConsentAt: timestamp("dppa_consent_at"),
   dppaConsentIp: text("dppa_consent_ip"),
+  pushToken: text("push_token"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   lastLoginAt: timestamp("last_login_at"),
