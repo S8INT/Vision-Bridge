@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   ActivityIndicator,
   FlatList,
   Platform,
@@ -10,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
@@ -90,83 +91,112 @@ function StatusTimeline({ status }: { status: string }) {
   );
 }
 
+// ── Highlight glow wrapper (lives outside ConsultCard so React Compiler is happy) ──
+function HighlightRing({ highlighted, children }: { highlighted: boolean; children: React.ReactNode }) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!highlighted) return;
+    Animated.sequence([
+      Animated.timing(anim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.delay(2000),
+      Animated.timing(anim, { toValue: 0, duration: 600, useNativeDriver: true }),
+    ]).start();
+  }, [highlighted, anim]);
+
+  if (!highlighted) return <>{children}</>;
+
+  return (
+    <View style={st.highlightOuter}>
+      <Animated.View style={[st.highlightRing, { opacity: anim }]} />
+      {children}
+    </View>
+  );
+}
+
 // ── Consultation Detail Card ────────────────────────────────────────────────────
-function ConsultCard({ consultation, onPress }: { consultation: Consultation; onPress: () => void }) {
+function ConsultCard({ consultation, onPress, highlighted }: {
+  consultation: Consultation;
+  onPress: () => void;
+  highlighted?: boolean;
+}) {
   const colors = useColors();
   const meta = STATUS_META[consultation.status] ?? STATUS_META["Pending"];
   const pri  = PRIORITY_META[consultation.priority] ?? PRIORITY_META["Routine"];
   const hasResponse = !!(consultation.specialistResponse || consultation.diagnosis || consultation.treatmentPlan);
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.88}
-      onPress={onPress}
-      style={[st.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-    >
-      {/* Priority bar */}
-      <View style={[st.priorityBar, { backgroundColor: pri.color }]} />
+    <HighlightRing highlighted={!!highlighted}>
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={onPress}
+        style={[st.card, {
+          backgroundColor: colors.card,
+          borderColor: highlighted ? "#0ea5e9" : colors.border,
+        }]}
+      >
+        {/* Priority bar */}
+        <View style={[st.priorityBar, { backgroundColor: pri.color }]} />
 
-      <View style={st.cardContent}>
-        {/* Top row */}
-        <View style={st.cardTopRow}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={[st.cardDate, { color: colors.mutedForeground }]}>
-              {formatRelDate(consultation.requestedAt)} · {new Date(consultation.requestedAt).toLocaleTimeString("en-UG", { hour: "2-digit", minute: "2-digit" })}
-            </Text>
-            <View style={[st.statusPill, { backgroundColor: meta.color + "18" }]}>
-              <Feather name={meta.icon as never} size={11} color={meta.color} />
-              <Text style={[st.statusPillText, { color: meta.color }]}>{meta.label}</Text>
+        <View style={st.cardContent}>
+          {/* Top row */}
+          <View style={st.cardTopRow}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={[st.cardDate, { color: colors.mutedForeground }]}>
+                {formatRelDate(consultation.requestedAt)} · {new Date(consultation.requestedAt).toLocaleTimeString("en-UG", { hour: "2-digit", minute: "2-digit" })}
+              </Text>
+              <View style={[st.statusPill, { backgroundColor: meta.color + "18" }]}>
+                <Feather name={meta.icon as never} size={11} color={meta.color} />
+                <Text style={[st.statusPillText, { color: meta.color }]}>{meta.label}</Text>
+              </View>
+            </View>
+            <View style={[st.priTag, { backgroundColor: pri.bg }]}>
+              <Text style={[st.priTagText, { color: pri.color }]}>{pri.label}</Text>
             </View>
           </View>
-          <View style={[st.priTag, { backgroundColor: pri.bg }]}>
-            <Text style={[st.priTagText, { color: pri.color }]}>{pri.label}</Text>
+
+          {/* Timeline */}
+          <StatusTimeline status={consultation.status} />
+          <Text style={[st.statusDesc, { color: colors.mutedForeground }]}>{meta.desc}</Text>
+
+          {/* Assigned doctor */}
+          {consultation.assignedTo && (
+            <View style={[st.doctorRow, { borderColor: colors.border }]}>
+              <View style={[st.doctorAvatar, { backgroundColor: "#0ea5e910" }]}>
+                <Feather name="user" size={14} color="#0ea5e9" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[st.doctorName, { color: colors.foreground }]}>{consultation.assignedTo}</Text>
+                <Text style={[st.doctorSub, { color: colors.mutedForeground }]}>Assigned specialist</Text>
+              </View>
+              <Feather name="check-circle" size={14} color="#0ea5e9" />
+            </View>
+          )}
+
+          {/* Clinical notes excerpt */}
+          {consultation.clinicalNotes && (
+            <Text style={[st.notes, { color: colors.mutedForeground }]} numberOfLines={2}>
+              {consultation.clinicalNotes}
+            </Text>
+          )}
+
+          {/* Specialist response preview */}
+          {hasResponse && (
+            <View style={[st.responseBox, { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" }]}>
+              <Feather name="message-square" size={13} color="#16a34a" />
+              <Text style={[st.responseText, { color: "#15803d" }]} numberOfLines={3}>
+                {consultation.specialistResponse ?? consultation.diagnosis ?? consultation.treatmentPlan ?? ""}
+              </Text>
+            </View>
+          )}
+
+          <View style={st.cardFooter}>
+            <Text style={[st.tapHint, { color: colors.mutedForeground }]}>Tap to view full details</Text>
+            <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
           </View>
         </View>
-
-        {/* Timeline */}
-        <StatusTimeline status={consultation.status} />
-        <Text style={[st.statusDesc, { color: colors.mutedForeground }]}>{meta.desc}</Text>
-
-        {/* Assigned doctor */}
-        {consultation.assignedTo && (
-          <View style={[st.doctorRow, { borderColor: colors.border }]}>
-            <View style={[st.doctorAvatar, { backgroundColor: "#0ea5e910" }]}>
-              <Feather name="user" size={14} color="#0ea5e9" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[st.doctorName, { color: colors.foreground }]}>{consultation.assignedTo}</Text>
-              <Text style={[st.doctorSub, { color: colors.mutedForeground }]}>Assigned specialist</Text>
-            </View>
-            <Feather name="check-circle" size={14} color="#0ea5e9" />
-          </View>
-        )}
-
-        {/* Clinical notes excerpt */}
-        {consultation.clinicalNotes && (
-          <Text style={[st.notes, { color: colors.mutedForeground }]} numberOfLines={2}>
-            {consultation.clinicalNotes}
-          </Text>
-        )}
-
-        {/* Specialist response preview */}
-        {hasResponse && (
-          <View style={[st.responseBox, { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" }]}>
-            <Feather name="message-square" size={13} color="#16a34a" />
-            <Text style={[st.responseText, { color: "#15803d" }]} numberOfLines={3}>
-              {consultation.specialistResponse
-                ?? consultation.diagnosis
-                ?? consultation.treatmentPlan
-                ?? ""}
-            </Text>
-          </View>
-        )}
-
-        <View style={st.cardFooter}>
-          <Text style={[st.tapHint, { color: colors.mutedForeground }]}>Tap to view full details</Text>
-          <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
-        </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </HighlightRing>
   );
 }
 
@@ -176,6 +206,9 @@ export default function MyConsultationsScreen() {
   const insets = useSafeAreaInsets();
   const { user, accessToken } = useAuth();
   const { consultations, patients, refresh: appRefresh } = useApp();
+  const { highlightId } = useLocalSearchParams<{ highlightId?: string }>();
+
+  const flatListRef = useRef<FlatList<Consultation>>(null);
 
   const API_BASE = `${process.env["EXPO_PUBLIC_API_URL"] ?? ""}/api`;
 
@@ -262,6 +295,11 @@ export default function MyConsultationsScreen() {
   // ── Filters ──────────────────────────────────────────────────────────────────
   const [activeFilter, setActiveFilter] = useState<FilterTab>("Active");
 
+  // When arriving via a deep-link, switch to "All" so the highlighted item is always visible
+  useEffect(() => {
+    if (highlightId) setActiveFilter("All");
+  }, [highlightId]);
+
   const filtered = useMemo(() => {
     switch (activeFilter) {
       case "Active":    return displayConsultations.filter((c) => c.status !== "Completed" && c.status !== "Cancelled");
@@ -269,6 +307,17 @@ export default function MyConsultationsScreen() {
       default:          return displayConsultations;
     }
   }, [displayConsultations, activeFilter]);
+
+  // Scroll to highlighted item once the list has rendered
+  useEffect(() => {
+    if (!highlightId || filtered.length === 0) return;
+    const idx = filtered.findIndex((c) => c.id === highlightId);
+    if (idx < 0) return;
+    const timer = setTimeout(() => {
+      flatListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.2 });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [highlightId, filtered]);
 
   const counts = useMemo(() => ({
     Active:    displayConsultations.filter((c) => c.status !== "Completed" && c.status !== "Cancelled").length,
@@ -389,11 +438,13 @@ export default function MyConsultationsScreen() {
 
       {/* ── List ── */}
       <FlatList
+        ref={flatListRef}
         data={filtered}
         keyExtractor={(c) => c.id}
         renderItem={({ item }) => (
           <ConsultCard
             consultation={item}
+            highlighted={item.id === highlightId}
             onPress={() => router.push(`/consultation/${item.id}` as never)}
           />
         )}
@@ -407,6 +458,11 @@ export default function MyConsultationsScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
+        onScrollToIndexFailed={(info) => {
+          setTimeout(() => {
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.2 });
+          }, 500);
+        }}
       />
     </View>
   );
@@ -439,6 +495,13 @@ const st = StyleSheet.create({
   filterTabText: { fontSize: 13, fontWeight: "600" },
   list:     { padding: 16, gap: 12 },
   center:   { alignItems: "center", paddingHorizontal: 20 },
+  // Highlight ring
+  highlightOuter: { position: "relative", marginBottom: 4 },
+  highlightRing: {
+    position: "absolute", inset: -3,
+    borderRadius: 16, borderWidth: 2.5, borderColor: "#0ea5e9",
+    zIndex: 1, pointerEvents: "none",
+  },
   // Card
   card: {
     borderRadius: 14, borderWidth: 1, overflow: "hidden",

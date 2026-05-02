@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import { Platform } from "react-native";
+import { router } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 
 const API_BASE = `${process.env["EXPO_PUBLIC_API_URL"] ?? ""}/api`;
@@ -17,9 +18,7 @@ Notifications.setNotificationHandler({
 });
 
 async function registerForPushNotifications(): Promise<string | null> {
-  if (!Device.isDevice) {
-    return null;
-  }
+  if (!Device.isDevice) return null;
 
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
@@ -38,9 +37,7 @@ async function registerForPushNotifications(): Promise<string | null> {
     finalStatus = status;
   }
 
-  if (finalStatus !== "granted") {
-    return null;
-  }
+  if (finalStatus !== "granted") return null;
 
   const tokenData = await Notifications.getExpoPushTokenAsync();
   return tokenData.data;
@@ -61,6 +58,18 @@ async function savePushToken(token: string, accessToken: string): Promise<void> 
   }
 }
 
+function navigateFromNotification(data: Record<string, unknown>): void {
+  const screen = data?.screen as string | undefined;
+  const consultationId = data?.consultationId as string | undefined;
+
+  if (screen === "my-consultations" || consultationId) {
+    const path = consultationId
+      ? `/(tabs)/my-consultations?highlightId=${encodeURIComponent(consultationId)}`
+      : "/(tabs)/my-consultations";
+    router.push(path as never);
+  }
+}
+
 export function usePushNotifications() {
   const { isAuthenticated, accessToken } = useAuth();
   const registered = useRef(false);
@@ -68,30 +77,43 @@ export function usePushNotifications() {
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated || !accessToken || registered.current) return;
+    if (!isAuthenticated || !accessToken) return;
 
-    registered.current = true;
+    if (!registered.current) {
+      registered.current = true;
 
-    registerForPushNotifications()
-      .then((token) => {
-        if (token && accessToken) {
-          savePushToken(token, accessToken);
-        }
-      })
-      .catch(console.error);
+      registerForPushNotifications()
+        .then((token) => {
+          if (token) savePushToken(token, accessToken);
+        })
+        .catch(console.error);
 
-    notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
-      console.log("[push] Notification received:", notification.request.content.title);
-    });
+      notificationListener.current = Notifications.addNotificationReceivedListener(
+        (notification) => {
+          console.log("[push] Received:", notification.request.content.title);
+        },
+      );
 
-    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
-      console.log("[push] Notification tapped:", response.notification.request.content.data);
-    });
+      responseListener.current = Notifications.addNotificationResponseReceivedListener(
+        (response) => {
+          const data = response.notification.request.content.data as Record<string, unknown>;
+          navigateFromNotification(data);
+        },
+      );
+
+      Notifications.getLastNotificationResponseAsync().then((response) => {
+        if (!response) return;
+        const data = response.notification.request.content.data as Record<string, unknown>;
+        navigateFromNotification(data);
+      });
+    }
 
     return () => {
       registered.current = false;
       notificationListener.current?.remove();
       responseListener.current?.remove();
+      notificationListener.current = null;
+      responseListener.current = null;
     };
   }, [isAuthenticated, accessToken]);
 }
