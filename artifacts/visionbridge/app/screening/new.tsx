@@ -490,66 +490,14 @@ export default function NewScreeningScreen() {
       ) : null}
 
       {/* ─────────── STEP: QUALITY CHECK ─────────── */}
-      {step === "quality" && qualityResult ? (
-        <View style={styles.qualityContainer}>
-          <View style={[styles.qualityCard, {
-            backgroundColor: qualityResult.pass ? colors.successLight : colors.warningLight,
-            borderColor: qualityResult.pass ? colors.normalBorder : "#fcd34d",
-          }]}>
-            <View style={styles.qualityHeader}>
-              <Feather
-                name={qualityResult.pass ? "check-circle" : "alert-triangle"}
-                size={24}
-                color={qualityResult.pass ? colors.success : colors.warning}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.qualityTitle, { color: qualityResult.pass ? colors.normalText : "#92400e" }]}>
-                  {qualityResult.pass ? "Image Quality Acceptable" : "Quality Warning"}
-                </Text>
-                <Text style={[styles.qualityOverall, { color: qualityResult.pass ? colors.success : colors.warning }]}>
-                  Overall Score: {qualityResult.overall}/100
-                </Text>
-              </View>
-            </View>
-
-            {qualityResult.reason ? (
-              <Text style={[styles.qualityReason, { color: "#92400e" }]}>{qualityResult.reason}</Text>
-            ) : null}
-
-            <View style={styles.qualityBars}>
-              <QualityBar label="Sharpness" score={qualityResult.blur} colors={colors} />
-              <QualityBar label="Brightness" score={qualityResult.brightness} colors={colors} />
-              <QualityBar label="Field of View" score={qualityResult.fieldOfView} colors={colors} />
-            </View>
-
-            <Text style={[styles.qualityNote, { color: qualityResult.pass ? colors.normalText : "#92400e" }]}>
-              {qualityResult.checkedLocally ? "Pre-checked on device · Full server analysis on upload" : "Server-validated"}
-            </Text>
-          </View>
-
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.qualityPreview} resizeMode="cover" />
-          ) : null}
-
-          <View style={styles.qualityActions}>
-            <TouchableOpacity
-              onPress={() => { setStep("select"); setImageUri(null); setQualityResult(null); }}
-              style={[styles.recaptureBtn, { borderColor: colors.border }]}
-              activeOpacity={0.8}
-            >
-              <Feather name="refresh-cw" size={16} color={colors.mutedForeground} />
-              <Text style={[styles.recaptureBtnText, { color: colors.mutedForeground }]}>Recapture</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleUploadAndAnalyze}
-              style={[styles.proceedBtn, { backgroundColor: qualityResult.pass ? colors.primary : colors.warning, flex: 1 }]}
-              activeOpacity={0.85}
-            >
-              <Feather name="upload-cloud" size={16} color="#fff" />
-              <Text style={styles.proceedBtnText}>{qualityResult.pass ? "Upload & Analyze" : "Proceed Anyway"}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+      {step === "quality" && imageUri ? (
+        <ImageQualityChecker
+          imageUri={imageUri}
+          result={qualityResult}
+          isScanning={isScanning}
+          onRecapture={() => { setStep("select"); setImageUri(null); setQualityResult(null); setIsScanning(false); }}
+          onProceed={handleUploadAndAnalyze}
+        />
       ) : null}
 
       {/* ─────────── STEP: UPLOADING ─────────── */}
