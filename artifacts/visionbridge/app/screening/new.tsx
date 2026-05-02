@@ -42,6 +42,7 @@ import {
 } from "@/services/imagingService";
 import offlineQueue from "@/services/offlineQueue";
 import { Badge } from "@/components/ui/Badge";
+import ImageQualityChecker from "@/components/ImageQualityChecker";
 
 type ScreeningStep = "select" | "capture" | "quality" | "uploading" | "analyzing" | "result";
 type EyeSide = "OD" | "OS" | "Unknown";
