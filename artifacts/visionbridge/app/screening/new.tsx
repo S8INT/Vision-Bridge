@@ -112,6 +112,7 @@ export default function NewScreeningScreen() {
   const [queueStats, setQueueStats] = useState<{ queued: number; failed: number } | null>(null);
   const [savedScreeningId, setSavedScreeningId] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<{ riskLevel: RiskLevel; confidence: number; findings: string[] } | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const scanAnim = useRef(new Animated.Value(0)).current;
@@ -175,23 +176,26 @@ export default function NewScreeningScreen() {
 
   async function runQualityCheck(uri: string, size?: number) {
     setStep("quality");
+    setIsScanning(true);
+    setQualityResult(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const q = await checkImageQualityLocally(uri, size);
     setQualityResult(q);
+    setIsScanning(false);
+    Haptics.notificationAsync(
+      q.critical
+        ? Haptics.NotificationFeedbackType.Error
+        : q.pass
+          ? Haptics.NotificationFeedbackType.Success
+          : Haptics.NotificationFeedbackType.Warning,
+    );
   }
 
   async function handleUploadAndAnalyze() {
     if (!selectedPatientId) { Alert.alert("Select Patient", "Please select a patient first."); return; }
     if (!imageUri) { Alert.alert("No Image", "Please capture or select an image first."); return; }
-    if (!qualityResult?.pass) {
-      Alert.alert(
-        "Quality Warning",
-        `${qualityResult?.reason ?? "Image quality is below threshold."}\n\nProceed anyway?`,
-        [
-          { text: "Recapture", style: "cancel" },
-          { text: "Proceed Anyway", onPress: () => doUpload() },
-        ]
-      );
+    if (qualityResult?.critical) {
+      Alert.alert("Image Unusable", qualityResult.reason ?? "Please recapture the image.");
       return;
     }
     await doUpload();
