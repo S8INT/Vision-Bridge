@@ -64,10 +64,10 @@ const ROLE_ACTIONS: Record<UserRole, QuickAction[]> = {
     { label: "Analytics",        icon: "bar-chart-2",     route: "/(tabs)/analytics",    color: "#64748b" },
   ],
   Patient: [
-    { label: "Start New Consultation", icon: "video",      route: "/patient/consult-request", color: "#ec4899" },
-    { label: "Upcoming Visits",        icon: "calendar",   route: "/(tabs)/visits",           color: "#0ea5e9" },
-    { label: "View Reports",           icon: "file-text",  route: "/(tabs)/reports",          color: "#10b981" },
-    { label: "Educational Content",    icon: "book-open",  route: "/(tabs)/education",        color: "#f59e0b" },
+    { label: "New Consultation",       icon: "send",       route: "/patient/consult-request",       color: "#ec4899" },
+    { label: "My Consultations",       icon: "message-circle", route: "/(tabs)/my-consultations",   color: "#0ea5e9" },
+    { label: "Upcoming Visits",        icon: "calendar",   route: "/(tabs)/visits",                 color: "#06b6d4" },
+    { label: "View Reports",           icon: "file-text",  route: "/(tabs)/reports",                color: "#10b981" },
   ],
 };
 

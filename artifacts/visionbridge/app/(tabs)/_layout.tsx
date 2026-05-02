@@ -14,12 +14,12 @@ import { useAuth, type UserRole } from "@/context/AuthContext";
 // ── Per-role tab visibility ───────────────────────────────────────────────────
 // Based on 5.3 RBAC Permission Matrix (VisionBridge UG v1.0) + Patient flow
 const TAB_VISIBILITY: Record<UserRole, Record<string, boolean>> = {
-  Admin:      { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: true,  notifications: true,  visits: false, reports: false, education: false },
-  Doctor:     { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: false, notifications: true,  visits: false, reports: false, education: false },
-  Technician: { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: true,  visits: false, reports: false, education: false },
-  CHW:        { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: false, visits: false, reports: false, education: false },
-  Viewer:     { index: true, patients: false, consultations: false, analytics: true,  campaigns: false, notifications: false, visits: false, reports: false, education: false },
-  Patient:    { index: true, patients: false, consultations: false, analytics: false, campaigns: false, notifications: true,  visits: true,  reports: true,  education: true  },
+  Admin:      { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: true,  notifications: true,  visits: false, reports: false, education: false, "my-consultations": false },
+  Doctor:     { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: false, notifications: true,  visits: false, reports: false, education: false, "my-consultations": false },
+  Technician: { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: true,  visits: false, reports: false, education: false, "my-consultations": false },
+  CHW:        { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: false, visits: false, reports: false, education: false, "my-consultations": false },
+  Viewer:     { index: true, patients: false, consultations: false, analytics: true,  campaigns: false, notifications: false, visits: false, reports: false, education: false, "my-consultations": false },
+  Patient:    { index: true, patients: false, consultations: false, analytics: false, campaigns: false, notifications: true,  visits: true,  reports: true,  education: true,  "my-consultations": true  },
 };
 
 function useTabVisible(tabName: string): boolean {
@@ -59,6 +59,12 @@ function NativeTabLayout() {
       {/* 3. Engage */}
       {vis.consultations && (
         <NativeTabs.Trigger name="consultations">
+          <Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
+          <Label>Consults</Label>
+        </NativeTabs.Trigger>
+      )}
+      {vis["my-consultations"] && (
+        <NativeTabs.Trigger name="my-consultations">
           <Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
           <Label>Consults</Label>
         </NativeTabs.Trigger>
@@ -112,14 +118,15 @@ function ClassicTabLayout() {
   const { user } = useAuth();
   const role: UserRole = user?.role ?? "Viewer";
 
-  const showVisits        = useTabVisible("visits");
-  const showReports       = useTabVisible("reports");
-  const showEducation     = useTabVisible("education");
-  const showPatients      = useTabVisible("patients");
-  const showConsultations = useTabVisible("consultations");
-  const showAnalytics     = useTabVisible("analytics");
-  const showCampaigns     = useTabVisible("campaigns");
-  const showNotifications = useTabVisible("notifications");
+  const showVisits           = useTabVisible("visits");
+  const showReports          = useTabVisible("reports");
+  const showEducation        = useTabVisible("education");
+  const showPatients         = useTabVisible("patients");
+  const showConsultations    = useTabVisible("consultations");
+  const showAnalytics        = useTabVisible("analytics");
+  const showCampaigns        = useTabVisible("campaigns");
+  const showNotifications    = useTabVisible("notifications");
+  const showMyConsultations  = useTabVisible("my-consultations");
 
   const hide = { tabBarButton: () => null } as const;
 
@@ -195,6 +202,15 @@ function ClassicTabLayout() {
         options={{
           title: "Consults",
           ...(showConsultations ? {} : hide),
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="message.circle" tintColor={color} size={24} /> : <Feather name="message-circle" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="my-consultations"
+        options={{
+          title: "Consults",
+          ...(showMyConsultations ? {} : hide),
           tabBarIcon: ({ color }) =>
             isIOS ? <SymbolView name="message.circle" tintColor={color} size={24} /> : <Feather name="message-circle" size={24} color={color} />,
         }}

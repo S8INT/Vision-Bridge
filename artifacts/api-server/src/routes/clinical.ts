@@ -92,6 +92,26 @@ function makePatchRoute(table: any) {
   };
 }
 
+// ── Patient's own consultations (cross-tenant safe, by userId → patient) ────────
+router.get("/my-consultations", async (req: Request, res: Response) => {
+  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
+  if (!requireDb(res)) return;
+  try {
+    const patientRows = await db!.select().from(patientsTable)
+      .where(eq(patientsTable.userId, req.auth.sub))
+      .limit(1);
+    const patient = patientRows[0];
+    if (!patient) { res.json({ items: [] }); return; }
+
+    const rows = await db!.select().from(consultationsTable)
+      .where(eq(consultationsTable.patientId, patient.id));
+    res.json({ items: rows });
+  } catch (err) {
+    console.error("[clinical] my-consultations failed:", err);
+    res.status(500).json({ error: "Failed to load your consultations" });
+  }
+});
+
 // ── Ophthalmologists: all available doctors across all tenants (patient-facing) ──
 router.get("/ophthalmologists", async (req: Request, res: Response) => {
   if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
