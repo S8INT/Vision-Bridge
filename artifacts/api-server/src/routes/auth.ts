@@ -884,6 +884,125 @@ router.patch(
   },
 );
 
+/**
+ * Update a user's profile fields. Admin only.
+ * Cannot change another admin's role (prevents privilege escalation).
+ */
+const updateUserProfileSchema = z.object({
+  fullName: z.string().min(2).optional(),
+  role: z.enum(["Admin", "Doctor", "Technician", "CHW", "Viewer", "Patient"]).optional(),
+  facility: z.string().optional(),
+  district: z.string().optional(),
+  phone: z.string().optional(),
+  isActive: z.boolean().optional(),
+});
+
+router.patch(
+  "/users/:userId",
+  requireAuth,
+  requireRole("users", "update"),
+  (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const parse = updateUserProfileSchema.safeParse(req.body);
+    if (!parse.success) {
+      res.status(400).json({ error: parse.error.issues[0]?.message ?? "Invalid request" });
+      return;
+    }
+
+    const target = findUserById(userId ?? "");
+    if (!target || target.tenantId !== req.auth!.tenantId) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // Prevent a non-self admin from locking out the last admin
+    if (parse.data.isActive === false || (parse.data.role && parse.data.role !== "Admin" && target.role === "Admin")) {
+      const allAdmins = listUsers(req.auth!.tenantId).filter((u) => u.role === "Admin" && u.isActive);
+      if (allAdmins.length <= 1 && target.role === "Admin") {
+        res.status(400).json({ error: "Cannot remove the last administrator account." });
+        return;
+      }
+    }
+
+    const patch: Partial<typeof target> = {};
+    if (parse.data.fullName !== undefined) patch.fullName = parse.data.fullName;
+    if (parse.data.role !== undefined) patch.role = parse.data.role;
+    if (parse.data.facility !== undefined) patch.facility = parse.data.facility;
+    if (parse.data.district !== undefined) patch.district = parse.data.district;
+    if (parse.data.phone !== undefined) patch.phone = parse.data.phone;
+    if (parse.data.isActive !== undefined) {
+      patch.isActive = parse.data.isActive;
+      if (!parse.data.isActive) revokeAllUserSessions(userId!);
+    }
+
+    const updated = updateUser(userId!, patch);
+
+    recordAuditEvent({
+      userId: req.auth!.sub,
+      tenantId: req.auth!.tenantId,
+      event: "user.updated",
+      outcome: "success",
+      ipAddress: getClientIp(req),
+      userAgent: req.headers["user-agent"] ?? "unknown",
+      deviceId: req.auth!.deviceId,
+      metadata: { targetUserId: userId, fields: Object.keys(patch) },
+      dppaCategory: "user_management",
+    });
+
+    res.json({ user: sanitizeUser(updated) });
+  },
+);
+
+/**
+ * Remove a user from the tenant (soft-delete: deactivates + revokes all sessions).
+ * Clinical data integrity is preserved. Admin only.
+ * Cannot remove yourself or the last admin.
+ */
+router.delete(
+  "/users/:userId",
+  requireAuth,
+  requireRole("users", "delete"),
+  (req: Request, res: Response) => {
+    const { userId } = req.params;
+
+    if (userId === req.auth!.sub) {
+      res.status(400).json({ error: "You cannot remove your own account." });
+      return;
+    }
+
+    const target = findUserById(userId ?? "");
+    if (!target || target.tenantId !== req.auth!.tenantId) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    if (target.role === "Admin") {
+      const activeAdmins = listUsers(req.auth!.tenantId).filter((u) => u.role === "Admin" && u.isActive);
+      if (activeAdmins.length <= 1) {
+        res.status(400).json({ error: "Cannot remove the last administrator account." });
+        return;
+      }
+    }
+
+    updateUser(userId!, { isActive: false });
+    revokeAllUserSessions(userId!);
+
+    recordAuditEvent({
+      userId: req.auth!.sub,
+      tenantId: req.auth!.tenantId,
+      event: "user.removed",
+      outcome: "success",
+      ipAddress: getClientIp(req),
+      userAgent: req.headers["user-agent"] ?? "unknown",
+      deviceId: req.auth!.deviceId,
+      metadata: { targetUserId: userId, targetEmail: target.email, targetRole: target.role },
+      dppaCategory: "user_management",
+    });
+
+    res.json({ ok: true });
+  },
+);
+
 // ── DPPA Compliance ───────────────────────────────────────────────────────────
 
 /**
