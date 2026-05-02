@@ -17,6 +17,8 @@ export interface QualityScore {
   brightness: number;       // 0–100 (100 = ideal exposure)
   fieldOfView: number;      // 0–100 (100 = full FOV captured)
   contrast: number;         // 0–100
+  redChannel: number;       // 0–100 (100 = strong red-channel dominance — expected in fundus)
+  glare: number;            // 0–100 (100 = no glare/overexposure)
   pass: boolean;
   reason?: string;
 }
@@ -152,21 +154,27 @@ async function scoreImageQuality(
   const meanStdDev = stats.channels.reduce((s, c) => s + c.stdev, 0) / stats.channels.length;
   const contrastScore = Math.min(100, Math.round((meanStdDev / 80) * 100));
 
-  // Blur score: use Laplacian variance estimate via luminance channel analysis
-  // Higher variance in the luminance = sharper image
+  // Blur score: real 3×3 Laplacian convolution — higher variance = sharper image
   const laplacianVariance = await estimateLaplacianVariance(buffer);
-  const blurScore = Math.min(100, Math.round((laplacianVariance / 500) * 100));
+  const blurScore = Math.min(100, Math.round((laplacianVariance / 1200) * 100));
 
-  // Field-of-view: check that non-black region covers enough of the image
-  // Retinal images have a characteristic circular FOV on a black background
+  // Field-of-view: circular retinal disc fill ratio
   const fovScore = await estimateFieldOfView(buffer, width, height);
+
+  // Red channel dominance: fundus images should be red-dominant
+  const redChannelScore = await checkRedChannelDominance(buffer, stats);
+
+  // Glare: fraction of near-saturated (overexposed) pixels
+  const glareScore = await detectGlare(buffer);
 
   // Overall composite score
   const overall = Math.round(
-    blurScore * 0.35 +
-    brightnessScore * 0.25 +
-    contrastScore * 0.20 +
-    fovScore * 0.20
+    blurScore       * 0.30 +
+    brightnessScore * 0.20 +
+    fovScore        * 0.20 +
+    contrastScore   * 0.15 +
+    redChannelScore * 0.10 +
+    glareScore      * 0.05
   );
 
   const pass = overall >= QUALITY_THRESHOLDS.overall &&
@@ -176,29 +184,69 @@ async function scoreImageQuality(
 
   let reason: string | undefined;
   if (!pass) {
-    if (blurScore < QUALITY_THRESHOLDS.blur) reason = "Image appears blurry — reposition camera and reattempt";
-    else if (brightnessScore < QUALITY_THRESHOLDS.brightness) reason = "Insufficient illumination — check flash and pupil dilation";
-    else if (fovScore < QUALITY_THRESHOLDS.fieldOfView) reason = "Incomplete field of view — ensure full optic disc is visible";
-    else reason = "Overall image quality below threshold — retake required";
+    if (blurScore < QUALITY_THRESHOLDS.blur) reason = "Image appears blurry — reposition camera and ensure patient is still";
+    else if (brightnessScore < QUALITY_THRESHOLDS.brightness) reason = "Insufficient illumination — check flash intensity and pupil dilation";
+    else if (fovScore < QUALITY_THRESHOLDS.fieldOfView) reason = "Incomplete field of view — centre the optic disc in frame";
+    else if (glareScore < 40) reason = "Lens glare detected — reduce flash intensity or increase working distance";
+    else if (redChannelScore < 30) reason = "Unusual colour balance — verify the imaging light source";
+    else reason = "Overall image quality below threshold — retake recommended";
   }
 
-  return { overall, blur: blurScore, brightness: brightnessScore, fieldOfView: fovScore, contrast: contrastScore, pass, reason };
+  return { overall, blur: blurScore, brightness: brightnessScore, fieldOfView: fovScore, contrast: contrastScore, redChannel: redChannelScore, glare: glareScore, pass, reason };
 }
 
 async function estimateLaplacianVariance(buffer: Buffer): Promise<number> {
-  // Downsample to greyscale and compute approximate sharpness via pixel variance
+  // True 3×3 cross-shaped Laplacian: [0,1,0; 1,-4,1; 0,1,0]
+  // Variance of the response is the standard sharpness metric (higher = sharper).
+  const SIZE = 128;
   const { data } = await sharp(buffer)
-    .resize(128, 96, { fit: "fill" })
+    .resize(SIZE, SIZE, { fit: "fill" })
     .greyscale()
     .raw()
     .toBuffer({ resolveWithObject: true });
 
-  let sum = 0, sumSq = 0;
-  for (const v of data) { sum += v; sumSq += v * v; }
-  const n = data.length;
-  const mean = sum / n;
-  const variance = sumSq / n - mean * mean;
-  return variance;
+  let lapSum = 0, lapSumSq = 0, lapN = 0;
+  for (let y = 1; y < SIZE - 1; y++) {
+    for (let x = 1; x < SIZE - 1; x++) {
+      const idx = y * SIZE + x;
+      const lap =
+        data[idx - SIZE] + data[idx - 1] + (-4 * data[idx]) +
+        data[idx + 1] + data[idx + SIZE];
+      lapSum += lap;
+      lapSumSq += lap * lap;
+      lapN++;
+    }
+  }
+  const lapMean = lapSum / lapN;
+  return lapSumSq / lapN - lapMean * lapMean;
+}
+
+async function checkRedChannelDominance(
+  buffer: Buffer,
+  stats?: Awaited<ReturnType<typeof sharp.prototype.stats>>
+): Promise<number> {
+  const s = stats ?? await sharp(buffer).resize(64, 64, { fit: "fill" }).stats();
+  if (s.channels.length < 3) return 50;
+  const [{ mean: r }, { mean: g }, { mean: b }] = s.channels;
+  const total = r + g + b;
+  if (total < 30) return 50; // too dark to judge
+  const dominance = r / (total / 3); // 1.0 = equal; >1 = red dominant
+  return Math.min(100, Math.max(0, Math.round((dominance - 0.7) / 0.7 * 100)));
+}
+
+async function detectGlare(buffer: Buffer): Promise<number> {
+  const SIZE = 64;
+  const raw = await sharp(buffer)
+    .resize(SIZE, SIZE, { fit: "fill" })
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+  let saturated = 0;
+  const total = SIZE * SIZE;
+  for (let i = 0; i < raw.length; i += 3) {
+    if (raw[i] > 240 && raw[i + 1] > 240 && raw[i + 2] > 240) saturated++;
+  }
+  return Math.max(0, Math.round((1 - Math.min((saturated / total) * 10, 1)) * 100));
 }
 
 async function estimateFieldOfView(buffer: Buffer, width: number, height: number): Promise<number> {

@@ -43,7 +43,17 @@ const METRIC_ICONS: Record<string, string> = {
   fieldOfView: "aperture",
   contrast:    "sliders",
   illumination:"zap",
+  redChannel:  "droplet",
+  glare:       "eye-off",
 };
+
+function getQualityGrade(overall: number): { grade: string; label: string; color: string } {
+  if (overall >= 85) return { grade: "A", label: "Excellent", color: "#22c55e" };
+  if (overall >= 70) return { grade: "B", label: "Good",      color: "#84cc16" };
+  if (overall >= 55) return { grade: "C", label: "Fair",      color: "#f59e0b" };
+  if (overall >= 40) return { grade: "D", label: "Poor",      color: "#f97316" };
+  return                     { grade: "F", label: "Unacceptable", color: "#ef4444" };
+}
 
 // ── Score ring component ──────────────────────────────────────────────────────
 
@@ -293,18 +303,28 @@ export default function ImageQualityChecker({
             </View>
           </View>
 
-          {/* ── Overall ring + sub-label ── */}
-          <View style={[s.overallRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <ScoreRing score={result.overall} size={64} colors={colors} r={r} />
-            <View style={{ flex: 1, gap: 3 }}>
-              <Text style={{ fontSize: r.font(12), fontWeight: "700", color: colors.foreground }}>
-                Overall quality score
-              </Text>
-              <Text style={{ fontSize: r.font(11), color: colors.mutedForeground }}>
-                Weighted: sharpness 35% · FOV 25% · brightness 20% · contrast 12% · illumination 8%
-              </Text>
-            </View>
-          </View>
+          {/* ── Overall ring + grade + sub-label ── */}
+          {(() => {
+            const grade = getQualityGrade(result.overall);
+            return (
+              <View style={[s.overallRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <ScoreRing score={result.overall} size={64} colors={colors} r={r} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={{ fontSize: r.font(12), fontWeight: "700", color: colors.foreground }}>
+                      Overall quality score
+                    </Text>
+                    <View style={[s.gradeBadge, { backgroundColor: grade.color + "20", borderColor: grade.color + "55" }]}>
+                      <Text style={[s.gradeText, { color: grade.color }]}>{grade.grade} · {grade.label}</Text>
+                    </View>
+                  </View>
+                  <Text style={{ fontSize: r.font(11), color: colors.mutedForeground }}>
+                    Sharpness 30% · FOV 22% · brightness 18% · contrast 15% · red channel 10% · glare 5%
+                  </Text>
+                </View>
+              </View>
+            );
+          })()}
 
           {/* ── Per-metric cards ── */}
           <View style={{ gap: 8, marginTop: 4 }}>
@@ -421,6 +441,10 @@ const s = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 14,
     marginBottom: 10,
   },
+  gradeBadge: {
+    borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+  },
+  gradeText: { fontSize: 11, fontWeight: "700" },
 
   metricCard: {
     borderWidth: 1, borderRadius: 11, padding: 11, gap: 8,

@@ -39,12 +39,16 @@ export interface ClientQualityResult {
   fieldOfView: number;
   contrast: number;
   illuminationUniform: number;
+  redChannel: number;
+  glare: number;
   metrics: {
     sharpness: QualityMetric;
     brightness: QualityMetric;
     fieldOfView: QualityMetric;
     contrast: QualityMetric;
     illumination: QualityMetric;
+    redChannel: QualityMetric;
+    glare: QualityMetric;
   };
   pass: boolean;
   critical: boolean;
@@ -110,6 +114,8 @@ export async function checkImageQualityLocally(
   let fov = 65;
   let contrast = 65;
   let illumination = 65;
+  let redChannel = 65;
+  let glare = 80;
   let critical = false;
   const criticalReasons: string[] = [];
 
@@ -143,19 +149,22 @@ export async function checkImageQualityLocally(
       fov = px.fov;
       contrast = px.contrast;
       illumination = px.illumination;
+      redChannel = px.redChannel;
+      glare = px.glare;
     } catch {
       // Canvas unavailable — keep heuristic defaults
     }
   }
 
   // ── Composite overall (weighted for clinical priority) ────────────────────
-  // Sharpness is most critical; FOV next, then brightness, contrast, illumination
   const overall = Math.round(
-    sharpness     * 0.35 +
-    fov           * 0.25 +
-    brightness    * 0.20 +
+    sharpness     * 0.30 +
+    fov           * 0.22 +
+    brightness    * 0.18 +
     contrast      * 0.12 +
-    illumination  * 0.08,
+    illumination  * 0.08 +
+    redChannel    * 0.06 +
+    glare         * 0.04,
   );
 
   const pass = !critical && overall >= 50 && sharpness >= 35 && brightness >= 25;
@@ -177,6 +186,11 @@ export async function checkImageQualityLocally(
     hint: score >= threshPass ? goodHint : score >= threshWarn ? warnHint : badHint,
   });
 
+  if (!pass && !criticalReasons.length) {
+    if (glare < 40) criticalReasons.push("Lens glare detected — reduce flash intensity or increase working distance");
+    else if (redChannel < 30) criticalReasons.push("Unusual colour balance — verify the imaging light source");
+  }
+
   return {
     overall,
     blur: sharpness,
@@ -184,27 +198,37 @@ export async function checkImageQualityLocally(
     fieldOfView: fov,
     contrast,
     illuminationUniform: illumination,
+    redChannel,
+    glare,
     metrics: {
       sharpness: mk(sharpness, 50, 30, "Sharpness",
         "Image is sharp — edges and vessels are well-defined",
-        "Slightly blurry — clean lens and ensure patient is still",
+        "Slightly blurry — clean the lens and ensure patient is still",
         "Too blurry — clean the camera lens and recapture"),
       brightness: mk(brightness, 40, 25, "Brightness",
         "Exposure looks good",
         "Slightly dark — increase slit-lamp brightness or move closer",
         "Image too dark — increase illumination or widen aperture"),
       fieldOfView: mk(fov, 55, 35, "Field of View",
-        "Retinal disc well-centred",
+        "Retinal disc well-centred in frame",
         "Partial disc — reposition camera to centre the optic disc",
-        "Poor disc coverage — align camera directly on pupil centre"),
+        "Poor disc coverage — align camera directly on the pupil centre"),
       contrast: mk(contrast, 45, 25, "Contrast",
-        "Good tonal range — vessels visible",
+        "Good tonal range — vessels and features visible",
         "Low contrast — check fundus alignment and focus",
         "Very low contrast — lens may be fogged or aperture too wide"),
       illumination: mk(illumination, 40, 25, "Illumination",
         "Even illumination across the retinal field",
         "Slight hot-spot — adjust camera angle slightly",
         "Uneven lighting — reposition the light source"),
+      redChannel: mk(redChannel, 40, 25, "Red Balance",
+        "Good red-channel dominance — typical of well-captured fundus",
+        "Lower red dominance — check illumination colour temperature",
+        "Poor red channel — verify the imaging light source and exposure"),
+      glare: mk(glare, 50, 30, "Glare",
+        "No significant glare detected",
+        "Mild glare — try reducing flash intensity slightly",
+        "Glare detected — reduce flash or increase working distance"),
     },
     pass,
     critical,
@@ -234,7 +258,7 @@ async function getFileSizeNative(uri: string): Promise<number | undefined> {
  */
 async function analysePixelsOnCanvas(
   uri: string,
-): Promise<{ sharpness: number; brightness: number; fov: number; contrast: number; illumination: number }> {
+): Promise<{ sharpness: number; brightness: number; fov: number; contrast: number; illumination: number; redChannel: number; glare: number }> {
   return new Promise((resolve, reject) => {
     const img = new (window as any).Image() as HTMLImageElement;
     img.crossOrigin = "anonymous";
@@ -327,7 +351,26 @@ async function analysePixelsOnCanvas(
         // delta 0 = perfect uniformity (100), delta 80+ = very non-uniform (0)
         const illumination = Math.max(0, Math.round(100 - (delta / 80) * 100));
 
-        resolve({ sharpness, brightness, fov, contrast, illumination });
+        // ── Red channel dominance ──
+        let totalR = 0, totalG = 0, totalB = 0, glarePixels = 0;
+        for (let i = 0; i < SIZE * SIZE; i++) {
+          totalR += raw[i * 4];
+          totalG += raw[i * 4 + 1];
+          totalB += raw[i * 4 + 2];
+          if (raw[i * 4] > 238 && raw[i * 4 + 1] > 238 && raw[i * 4 + 2] > 238) glarePixels++;
+        }
+        const avgR = totalR / (SIZE * SIZE);
+        const avgG = totalG / (SIZE * SIZE);
+        const avgB = totalB / (SIZE * SIZE);
+        const colorTotal = avgR + avgG + avgB;
+        const dominance = colorTotal < 25 ? 1.0 : avgR / (colorTotal / 3);
+        const redChannel = Math.min(100, Math.max(0, Math.round((dominance - 0.7) / 0.7 * 100)));
+
+        // ── Glare (near-saturated pixels) ──
+        const glareRatio = glarePixels / (SIZE * SIZE);
+        const glare = Math.max(0, Math.round((1 - Math.min(glareRatio * 12, 1)) * 100));
+
+        resolve({ sharpness, brightness, fov, contrast, illumination, redChannel, glare });
       } catch (e) { reject(e); }
     };
     img.onerror = reject;
@@ -355,7 +398,13 @@ export async function uploadRetinalImage(
       width: 0,
       height: 0,
       sizeBytes: 0,
-      qualityScore: { overall: 0, blur: 0, brightness: 0, fieldOfView: 0, pass: true, checkedLocally: true, reason: "Queued for upload when online" },
+      qualityScore: {
+        overall: 0, blur: 0, brightness: 0, fieldOfView: 0, contrast: 0,
+        illuminationUniform: 0, redChannel: 50, glare: 100,
+        metrics: {} as any,
+        pass: true, critical: false, checkedLocally: true as const,
+        reason: "Queued for upload when online",
+      },
       dicomWrapper: buildOfflineDicomWrapper(metadata),
       uploadedAt: new Date().toISOString(),
       storage: "offline-queued",

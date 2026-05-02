@@ -72,25 +72,40 @@ function getRiskVariant(risk: RiskLevel) {
   return "success";
 }
 
-function QualityBar({ label, score, colors }: { label: string; score: number; colors: ReturnType<typeof useColors> }) {
+function getQualityGrade(overall: number): { grade: string; label: string; color: string } {
+  if (overall >= 85) return { grade: "A", label: "Excellent", color: "#22c55e" };
+  if (overall >= 70) return { grade: "B", label: "Good", color: "#84cc16" };
+  if (overall >= 55) return { grade: "C", label: "Fair", color: "#f59e0b" };
+  if (overall >= 40) return { grade: "D", label: "Poor", color: "#f97316" };
+  return { grade: "F", label: "Unacceptable", color: "#ef4444" };
+}
+
+function QualityBar({ label, score, hint, colors }: { label: string; score: number; hint?: string; colors: ReturnType<typeof useColors> }) {
   const color = score >= 70 ? colors.success : score >= 45 ? colors.warning : colors.destructive;
   return (
-    <View style={qualStyles.row}>
-      <Text style={[qualStyles.label, { color: colors.mutedForeground }]}>{label}</Text>
-      <View style={[qualStyles.track, { backgroundColor: colors.muted }]}>
-        <View style={[qualStyles.fill, { width: `${score}%` as any, backgroundColor: color }]} />
+    <View style={qualStyles.barWrapper}>
+      <View style={qualStyles.row}>
+        <Text style={[qualStyles.label, { color: colors.mutedForeground }]}>{label}</Text>
+        <View style={[qualStyles.track, { backgroundColor: colors.muted }]}>
+          <View style={[qualStyles.fill, { width: `${score}%` as any, backgroundColor: color }]} />
+        </View>
+        <Text style={[qualStyles.score, { color }]}>{score}</Text>
       </View>
-      <Text style={[qualStyles.score, { color }]}>{score}</Text>
+      {hint && score < 70 ? (
+        <Text style={[qualStyles.hint, { color: score < 45 ? colors.destructive : "#92400e" }]}>↳ {hint}</Text>
+      ) : null}
     </View>
   );
 }
 
 const qualStyles = StyleSheet.create({
+  barWrapper: { gap: 3 },
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   label: { fontSize: 12, width: 80 },
   track: { flex: 1, height: 6, borderRadius: 3, overflow: "hidden" },
   fill: { height: 6, borderRadius: 3 },
   score: { fontSize: 12, fontWeight: "700", width: 28, textAlign: "right" },
+  hint: { fontSize: 11, lineHeight: 16, paddingLeft: 88, fontStyle: "italic" },
 });
 
 export default function NewScreeningScreen() {
@@ -244,7 +259,7 @@ export default function NewScreeningScreen() {
           `Server rejected image: ${err.message}\n\nQuality score: ${err.qualityScore.overall}/100`,
           [
             { text: "Recapture", onPress: () => { setStep("capture"); setImageUri(null); } },
-            { text: "Review", onPress: () => { setQualityResult({ ...err.qualityScore, checkedLocally: true }); setStep("quality"); } },
+            { text: "Review", onPress: () => { setQualityResult({ ...err.qualityScore, illuminationUniform: 0, redChannel: 50, glare: 100, metrics: {} as any, critical: false, checkedLocally: true }); setStep("quality"); } },
           ]
         );
         setStep("quality");
@@ -753,7 +768,7 @@ const styles = StyleSheet.create({
   analyzeStepText: { fontSize: 12 },
 
   // Result step
-  riskBanner: { flexDirection: "row", alignItems: "flex-start", gap: 14, borderWidth: 1.5, borderRadius: 14, padding: 16, gap: 12 },
+  riskBanner: { flexDirection: "row", alignItems: "flex-start", gap: 12, borderWidth: 1.5, borderRadius: 14, padding: 16 },
   riskConfidence: { fontSize: 12, marginTop: 4 },
   riskEye: { fontSize: 11 },
   findingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
