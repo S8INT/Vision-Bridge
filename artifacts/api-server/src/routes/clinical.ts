@@ -185,7 +185,7 @@ router.post("/patient-consult", async (req: Request, res: Response) => {
         .where(eq(doctorsTable.id, assignedDoctor.id));
     }
 
-    // Create a notification for the patient
+    // Create an in-app notification for the patient
     await db!.insert(notificationsTable).values({
       tenantId: patient.tenantId,
       type: "ConsultationUpdate",
@@ -200,6 +200,39 @@ router.post("/patient-consult", async (req: Request, res: Response) => {
     });
 
     res.status(201).json({ item: consultation, assignedDoctor: assignedDoctor ?? null });
+
+    // ── Push the assigned doctor (best-effort, non-blocking) ──────────────────
+    if (assignedDoctor?.userId) {
+      (async () => {
+        try {
+          const doctorUser = findUserById(assignedDoctor.userId!);
+          if (!doctorUser?.pushToken) return;
+
+          const patientName = `${patient.firstName} ${patient.lastName}`.trim();
+          const priority = req.body.priority ?? "Routine";
+
+          await sendExpoPush({
+            token: doctorUser.pushToken,
+            title: "New Consultation Assigned",
+            body: `${patientName} · ${priority} priority. Tap to review their case.`,
+            data: { consultationId: consultation.id, screen: "consultations" },
+          });
+
+          await db!.insert(notificationsTable).values({
+            tenantId: assignedDoctor.tenantId,
+            type: "ConsultationUpdate",
+            title: "New Consultation Assigned",
+            body: `${patientName} · ${priority} priority consultation has been assigned to you.`,
+            read: false,
+            createdAt: new Date(),
+            patientId: patient.id,
+            consultationId: consultation.id,
+          });
+        } catch (notifErr) {
+          console.error("[clinical] doctor push failed (non-fatal):", notifErr);
+        }
+      })();
+    }
   } catch (err) {
     console.error("[clinical] patient-consult failed:", err);
     res.status(400).json({ error: "Failed to submit consultation request", detail: String(err) });
@@ -228,6 +261,50 @@ router.patch("/consultations/:id", async (req: Request, res: Response) => {
     const [row] = await db!.update(consultationsTable).set(req.body).where(eq(consultationsTable.id, id)).returning();
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
     res.json({ item: row });
+
+    // ── Fire push to doctor when a consultation is manually assigned ─────────
+    if (req.body.assignedDoctorId && row.assignedDoctorId) {
+      (async () => {
+        try {
+          const doctorRows = await db!.select().from(doctorsTable)
+            .where(eq(doctorsTable.id, row.assignedDoctorId!))
+            .limit(1);
+          const doctor = doctorRows[0];
+          if (!doctor?.userId) return;
+
+          const doctorUser = findUserById(doctor.userId);
+          if (!doctorUser?.pushToken) return;
+
+          const patientRows = await db!.select().from(patientsTable)
+            .where(eq(patientsTable.id, row.patientId))
+            .limit(1);
+          const patient = patientRows[0];
+          const patientName = patient
+            ? `${patient.firstName} ${patient.lastName}`.trim()
+            : "A patient";
+
+          await sendExpoPush({
+            token: doctorUser.pushToken,
+            title: "New Consultation Assigned",
+            body: `${patientName} · ${row.priority} priority. Tap to review their case.`,
+            data: { consultationId: row.id, screen: "consultations" },
+          });
+
+          await db!.insert(notificationsTable).values({
+            tenantId: row.tenantId,
+            type: "ConsultationUpdate",
+            title: "New Consultation Assigned",
+            body: `${patientName} · ${row.priority} priority consultation has been assigned to you.`,
+            read: false,
+            createdAt: new Date(),
+            patientId: row.patientId,
+            consultationId: row.id,
+          });
+        } catch (notifErr) {
+          console.error("[clinical] doctor assignment push failed (non-fatal):", notifErr);
+        }
+      })();
+    }
 
     // ── Fire push notification to patient (best-effort, non-blocking) ──
     const triggersNotification =

@@ -62,7 +62,11 @@ function navigateFromNotification(data: Record<string, unknown>): void {
   const screen = data?.screen as string | undefined;
   const consultationId = data?.consultationId as string | undefined;
 
-  if (screen === "my-consultations" || consultationId) {
+  if (screen === "consultations" && consultationId) {
+    // Doctor tap — go straight to the consultation detail view
+    router.push(`/consultation/${consultationId}` as never);
+  } else if (screen === "my-consultations" || (consultationId && screen !== "consultations")) {
+    // Patient tap — go to My Consultations with the item highlighted
     const path = consultationId
       ? `/(tabs)/my-consultations?highlightId=${encodeURIComponent(consultationId)}`
       : "/(tabs)/my-consultations";
