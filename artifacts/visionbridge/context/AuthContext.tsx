@@ -50,6 +50,8 @@ interface AuthState {
 interface AuthActions {
   login: (email: string, password: string, deviceInfo?: DeviceInfo) => Promise<LoginResult>;
   register: (input: RegisterInput, deviceInfo?: DeviceInfo) => Promise<RegisterResult>;
+  adminSetup: (input: AdminSetupInput, deviceInfo?: DeviceInfo) => Promise<AdminSetupResult>;
+  checkSetupStatus: () => Promise<boolean>;
   completeMfa: (code: string) => Promise<void>;
   logout: (allDevices?: boolean) => Promise<void>;
   refreshToken: () => Promise<boolean>;
@@ -68,7 +70,21 @@ export interface RegisterInput {
   dppaConsent: true;
 }
 
+export interface AdminSetupInput {
+  email: string;
+  password: string;
+  fullName: string;
+  facility: string;
+  district: string;
+  phone?: string;
+  dppaConsent: true;
+}
+
 export type RegisterResult =
+  | { success: true }
+  | { success: false; error: string };
+
+export type AdminSetupResult =
   | { success: true }
   | { success: false; error: string };
 
@@ -265,6 +281,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [scheduleRefresh]);
 
+  // ── Check Setup Status ─────────────────────────────────────────────────────
+
+  const checkSetupStatus = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/setup/status`);
+      if (!res.ok) return false;
+      const data = await res.json() as { needsSetup: boolean };
+      return data.needsSetup;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // ── Admin Setup (first-time only) ──────────────────────────────────────────
+
+  const adminSetup = useCallback(async (
+    input: AdminSetupInput,
+    deviceInfo?: DeviceInfo,
+  ): Promise<AdminSetupResult> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/setup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          deviceId: deviceInfo?.deviceId,
+          deviceName: deviceInfo?.deviceName ?? "VisionBridge Mobile",
+          devicePlatform: deviceInfo?.devicePlatform ?? "expo",
+        }),
+      });
+
+      const data = await res.json() as {
+        accessToken?: string;
+        refreshToken?: string;
+        expiresIn?: number;
+        user?: AuthUser;
+        permissions?: Permission;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        return { success: false, error: data.error ?? "Setup failed" };
+      }
+
+      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, data.refreshToken!);
+      setState((s) => ({
+        ...s,
+        accessToken: data.accessToken!,
+        user: data.user!,
+        permissions: data.permissions!,
+        isAuthenticated: true,
+        mfaChallenge: null,
+      }));
+      scheduleRefresh(data.expiresIn ?? 900);
+      return { success: true };
+    } catch {
+      return { success: false, error: "Network error. Check your connection and try again." };
+    }
+  }, [scheduleRefresh]);
+
   // ── Register (self-service signup) ─────────────────────────────────────────
 
   const register = useCallback(async (
@@ -391,6 +467,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ...state,
     login,
     register,
+    adminSetup,
+    checkSetupStatus,
     completeMfa,
     logout,
     refreshToken,

@@ -951,6 +951,156 @@ router.get("/dppa/my-data", requireAuth, (req: Request, res: Response) => {
   });
 });
 
+// ── First-time Setup ──────────────────────────────────────────────────────────
+
+/**
+ * GET /auth/setup/status
+ * Public endpoint — returns whether any Admin user exists in the tenant.
+ * Used by the mobile app on first launch to decide whether to show the
+ * "Create first admin" screen.
+ */
+router.get("/setup/status", async (_req: Request, res: Response) => {
+  const tenantId = getDemoTenantId();
+  if (!tenantId) {
+    res.json({ needsSetup: true });
+    return;
+  }
+  const allUsers = listUsers(tenantId);
+  const hasAdmin = allUsers.some((u) => u.role === "Admin" && u.isActive);
+  res.json({ needsSetup: !hasAdmin });
+});
+
+const setupSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  fullName: z.string().min(2),
+  facility: z.string().min(1),
+  district: z.string().min(1),
+  phone: z.string().optional(),
+  dppaConsent: z.literal(true, { errorMap: () => ({ message: "You must accept the DPPA consent to continue" }) }),
+});
+
+/**
+ * POST /auth/setup
+ * Public endpoint — creates the first Admin user.
+ * Returns 409 if an Admin already exists (prevents any subsequent use).
+ * On success, issues access + refresh tokens and signs the admin in immediately.
+ */
+router.post("/setup", async (req: Request, res: Response) => {
+  const tenantId = getDemoTenantId();
+  if (!tenantId) {
+    res.status(503).json({ error: "Server not ready. Please try again in a moment." });
+    return;
+  }
+
+  const allUsers = listUsers(tenantId);
+  const hasAdmin = allUsers.some((u) => u.role === "Admin" && u.isActive);
+  if (hasAdmin) {
+    res.status(409).json({ error: "An administrator account already exists. Please sign in instead." });
+    return;
+  }
+
+  const parse = setupSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: parse.error.issues[0]?.message ?? "Invalid setup data", issues: parse.error.issues });
+    return;
+  }
+
+  const { email, password, fullName, facility, district, phone } = parse.data;
+
+  if (findUserByEmail(email)) {
+    res.status(409).json({ error: "An account with this email already exists." });
+    return;
+  }
+
+  const passwordHash = await hashPassword(password);
+  const id = randomUUID();
+  const ip = getClientIp(req);
+  const now = new Date();
+
+  const newAdmin = {
+    id,
+    tenantId,
+    email,
+    passwordHash,
+    role: "Admin" as const,
+    fullName,
+    facility,
+    district,
+    phone,
+    isActive: true,
+    mfaEnabled: false,
+    mfaSecret: null,
+    mfaPendingSecret: null,
+    dppaConsentAt: now,
+    dppaConsentIp: ip,
+    pushToken: null,
+    createdAt: now,
+    lastLoginAt: now,
+  };
+
+  addUser(newAdmin);
+
+  recordAuditEvent({
+    userId: id,
+    tenantId,
+    event: "user.first_admin_created",
+    outcome: "success",
+    ipAddress: ip,
+    userAgent: req.headers["user-agent"] ?? "unknown",
+    deviceId: getDeviceId(req),
+    metadata: { email, facility, district },
+    dppaCategory: "user_management",
+  });
+
+  const deviceId = getDeviceId(req);
+  const refreshTokenStr = generateRefreshToken();
+  const expiresAt = refreshTokenExpiresAt();
+
+  const session = createSession({
+    userId: id,
+    tenantId,
+    refreshToken: refreshTokenStr,
+    deviceId,
+    deviceName: (req.body?.deviceName as string) ?? "VisionBridge Mobile",
+    devicePlatform: (req.body?.devicePlatform as string) ?? "expo",
+    ipAddress: ip,
+    userAgent: req.headers["user-agent"] ?? "unknown",
+    expiresAt,
+    revokedAt: null,
+  });
+
+  const accessToken = signAccessToken({
+    sub: id,
+    tenantId,
+    role: "Admin",
+    sessionId: session.id,
+    deviceId,
+    email: newAdmin.email,
+    fullName: newAdmin.fullName,
+  });
+
+  recordAuditEvent({
+    userId: id,
+    tenantId,
+    event: "auth.login",
+    outcome: "success",
+    ipAddress: ip,
+    userAgent: req.headers["user-agent"] ?? "unknown",
+    deviceId,
+    metadata: { source: "first_admin_setup" },
+    dppaCategory: "authentication",
+  });
+
+  res.status(201).json({
+    accessToken,
+    refreshToken: refreshTokenStr,
+    expiresIn: 900,
+    user: sanitizeUser(newAdmin),
+    permissions: canAccessSummary("Admin"),
+  });
+});
+
 // ── Permissions helper ────────────────────────────────────────────────────────
 
 type PermissionSummary = Record<string, Record<string, boolean>>;

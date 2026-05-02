@@ -28,22 +28,40 @@ function PushNotificationRegistrar() {
 }
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, mfaChallenge } = useAuth();
+  const { isAuthenticated, isLoading, mfaChallenge, checkSetupStatus } = useAuth();
   const segments = useSegments();
+  const [setupChecked, setSetupChecked] = React.useState(false);
+  const [needsSetup, setNeedsSetup] = React.useState(false);
 
   useEffect(() => {
     if (isLoading) return;
+    if (isAuthenticated) { setSetupChecked(true); return; }
 
-    const inAuthGroup = segments[0] === "login" || segments[0] === "mfa" || segments[0] === "signup";
+    checkSetupStatus().then((required) => {
+      setNeedsSetup(required);
+      setSetupChecked(true);
+    });
+  }, [isLoading, isAuthenticated]);
 
-    if (!isAuthenticated && !inAuthGroup) {
-      router.replace("/login");
-    } else if (isAuthenticated && inAuthGroup) {
+  useEffect(() => {
+    if (isLoading || !setupChecked) return;
+
+    const inAuthGroup =
+      segments[0] === "login" ||
+      segments[0] === "mfa" ||
+      segments[0] === "signup" ||
+      segments[0] === "setup";
+
+    if (isAuthenticated && inAuthGroup) {
       router.replace("/(tabs)");
     } else if (mfaChallenge && segments[0] !== "mfa") {
       router.replace("/mfa");
+    } else if (!isAuthenticated && needsSetup && segments[0] !== "setup") {
+      router.replace("/setup");
+    } else if (!isAuthenticated && !needsSetup && !inAuthGroup) {
+      router.replace("/login");
     }
-  }, [isAuthenticated, isLoading, mfaChallenge, segments]);
+  }, [isAuthenticated, isLoading, mfaChallenge, segments, setupChecked, needsSetup]);
 
   return <>{children}</>;
 }
@@ -54,6 +72,7 @@ function RootLayoutNav() {
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="signup" options={{ headerShown: false }} />
       <Stack.Screen name="mfa" options={{ headerShown: false }} />
+      <Stack.Screen name="setup" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen
         name="patient/register"
