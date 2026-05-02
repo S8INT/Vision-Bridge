@@ -25,12 +25,29 @@ export interface UploadMetadata {
   campaignId?: string;
 }
 
+export interface QualityMetric {
+  score: number;
+  pass: boolean;
+  label: string;
+  hint: string;
+}
+
 export interface ClientQualityResult {
   overall: number;
   blur: number;
   brightness: number;
   fieldOfView: number;
+  contrast: number;
+  illuminationUniform: number;
+  metrics: {
+    sharpness: QualityMetric;
+    brightness: QualityMetric;
+    fieldOfView: QualityMetric;
+    contrast: QualityMetric;
+    illumination: QualityMetric;
+  };
   pass: boolean;
+  critical: boolean;
   reason?: string;
   checkedLocally: true;
 }
@@ -72,120 +89,246 @@ export interface DicomWrapper {
 }
 
 /**
- * Performs a fast client-side quality pre-check on an image URI.
+ * Performs a thorough client-side quality pre-check on a retinal image URI.
  * Works on both native (Expo) and web.
  *
- * Checks:
- *  - File size (too small = likely failed capture)
- *  - Basic dimensions (too small = insufficient FOV)
- *  - Pixel brightness sampling via canvas (web only)
+ * Checks (web full pixel analysis / native file-size heuristics):
+ *  1. Sharpness   — Laplacian variance: blurry images lose high-frequency edges
+ *  2. Brightness  — Mean luminance: too dark or overexposed
+ *  3. Field of View — ratio of non-dark pixels: circular retinal disc fill
+ *  4. Contrast    — luminance range / std-dev: flat images lack clinical detail
+ *  5. Illumination uniformity — centre vs. ring brightness delta
+ *
+ * Returns per-metric scores, actionable hints, pass/critical flags.
  */
 export async function checkImageQualityLocally(
   imageUri: string,
-  fileSize?: number
+  fileSize?: number,
 ): Promise<ClientQualityResult> {
-  const issues: string[] = [];
-  let blurScore = 70;
-  let brightnessScore = 70;
-  let fovScore = 70;
+  let sharpness = 65;
+  let brightness = 65;
+  let fov = 65;
+  let contrast = 65;
+  let illumination = 65;
+  let critical = false;
+  const criticalReasons: string[] = [];
 
-  // ── Size check ──
-  if (fileSize !== undefined) {
-    if (fileSize < 10_000) {
-      blurScore = 10;
-      issues.push("File too small — capture may have failed");
-    } else if (fileSize < 50_000) {
-      blurScore = 40;
-      issues.push("Image file very small — may be low resolution");
-    } else if (fileSize > 15_000_000) {
-      issues.push("File exceeds 15MB limit");
+  // ── File-size guard (native + web) ───────────────────────────────────────
+  const effectiveSize =
+    fileSize ??
+    (Platform.OS !== "web" && imageUri.startsWith("file://")
+      ? await getFileSizeNative(imageUri)
+      : undefined);
+
+  if (effectiveSize !== undefined) {
+    if (effectiveSize < 10_000) {
+      sharpness = 5;
+      critical = true;
+      criticalReasons.push("File too small — capture likely failed");
+    } else if (effectiveSize < 40_000) {
+      sharpness = Math.min(sharpness, 30);
+      criticalReasons.push("Very low file size — resolution may be too low");
+    } else if (effectiveSize > 20_000_000) {
+      criticalReasons.push("File exceeds 20 MB — will be rejected by server");
+      critical = true;
     }
   }
 
-  // ── Native file info ──
-  if (Platform.OS !== "web" && imageUri.startsWith("file://")) {
+  // ── Web: full pixel analysis via off-screen canvas ────────────────────────
+  if (Platform.OS === "web" && !critical) {
     try {
-      const info = await FileSystem.getInfoAsync(imageUri, { size: true });
-      if (info.exists && (info as any).size) {
-        const size = (info as any).size as number;
-        if (size < 30_000) {
-          blurScore = 20;
-          issues.push("Image file very small");
-        }
-        if (size > 20_000_000) {
-          issues.push("Image too large — will be compressed on server");
-        }
-      }
-    } catch {}
-  }
-
-  // ── Web canvas brightness/FOV sampling ──
-  if (Platform.OS === "web") {
-    try {
-      const result = await sampleImageOnCanvas(imageUri);
-      brightnessScore = result.brightness;
-      fovScore = result.fov;
-      blurScore = result.blur;
+      const px = await analysePixelsOnCanvas(imageUri);
+      sharpness = px.sharpness;
+      brightness = px.brightness;
+      fov = px.fov;
+      contrast = px.contrast;
+      illumination = px.illumination;
     } catch {
-      // Ignore canvas errors — fall back to defaults
+      // Canvas unavailable — keep heuristic defaults
     }
   }
 
-  const overall = Math.round(blurScore * 0.40 + brightnessScore * 0.30 + fovScore * 0.30);
-  const pass = overall >= 45 && blurScore >= 25;
-  const reason = issues.length > 0 ? issues.join("; ") : (pass ? undefined : "Image quality may be insufficient");
+  // ── Composite overall (weighted for clinical priority) ────────────────────
+  // Sharpness is most critical; FOV next, then brightness, contrast, illumination
+  const overall = Math.round(
+    sharpness     * 0.35 +
+    fov           * 0.25 +
+    brightness    * 0.20 +
+    contrast      * 0.12 +
+    illumination  * 0.08,
+  );
 
-  return { overall, blur: blurScore, brightness: brightnessScore, fieldOfView: fovScore, pass, reason, checkedLocally: true };
+  const pass = !critical && overall >= 50 && sharpness >= 35 && brightness >= 25;
+
+  // Flag critical if any single key metric is catastrophic even on native
+  if (sharpness < 15 || brightness < 10) critical = true;
+
+  const reason =
+    criticalReasons.length > 0
+      ? criticalReasons[0]
+      : !pass
+        ? "Image quality below minimum — recapture recommended"
+        : undefined;
+
+  const mk = (score: number, threshPass: number, threshWarn: number, label: string, goodHint: string, warnHint: string, badHint: string): QualityMetric => ({
+    score,
+    pass: score >= threshPass,
+    label,
+    hint: score >= threshPass ? goodHint : score >= threshWarn ? warnHint : badHint,
+  });
+
+  return {
+    overall,
+    blur: sharpness,
+    brightness,
+    fieldOfView: fov,
+    contrast,
+    illuminationUniform: illumination,
+    metrics: {
+      sharpness: mk(sharpness, 50, 30, "Sharpness",
+        "Image is sharp — edges and vessels are well-defined",
+        "Slightly blurry — clean lens and ensure patient is still",
+        "Too blurry — clean the camera lens and recapture"),
+      brightness: mk(brightness, 40, 25, "Brightness",
+        "Exposure looks good",
+        "Slightly dark — increase slit-lamp brightness or move closer",
+        "Image too dark — increase illumination or widen aperture"),
+      fieldOfView: mk(fov, 55, 35, "Field of View",
+        "Retinal disc well-centred",
+        "Partial disc — reposition camera to centre the optic disc",
+        "Poor disc coverage — align camera directly on pupil centre"),
+      contrast: mk(contrast, 45, 25, "Contrast",
+        "Good tonal range — vessels visible",
+        "Low contrast — check fundus alignment and focus",
+        "Very low contrast — lens may be fogged or aperture too wide"),
+      illumination: mk(illumination, 40, 25, "Illumination",
+        "Even illumination across the retinal field",
+        "Slight hot-spot — adjust camera angle slightly",
+        "Uneven lighting — reposition the light source"),
+    },
+    pass,
+    critical,
+    reason,
+    checkedLocally: true,
+  };
 }
 
-async function sampleImageOnCanvas(uri: string): Promise<{ brightness: number; fov: number; blur: number }> {
+async function getFileSizeNative(uri: string): Promise<number | undefined> {
+  try {
+    const info = await FileSystem.getInfoAsync(uri, { size: true });
+    return info.exists ? ((info as any).size as number | undefined) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Full pixel-level quality analysis using a 128×128 canvas sample.
+ *
+ * Sharpness  — Laplacian edge-variance: sum of |centre - neighbour| over all pixels.
+ *              High variance = sharp; low variance = blurry.
+ * Brightness — Mean luminance (0-255) mapped to 0-100.
+ * FOV        — Fraction of pixels brighter than a dark-border threshold (retinal circular mask).
+ * Contrast   — Luminance standard deviation mapped to 0-100.
+ * Illumination — Mean brightness of centre 40% vs outer ring; uniformity score.
+ */
+async function analysePixelsOnCanvas(
+  uri: string,
+): Promise<{ sharpness: number; brightness: number; fov: number; contrast: number; illumination: number }> {
   return new Promise((resolve, reject) => {
-    const img = new (window as any).Image();
+    const img = new (window as any).Image() as HTMLImageElement;
     img.crossOrigin = "anonymous";
     img.onload = () => {
       try {
+        const SIZE = 128;
         const canvas = document.createElement("canvas");
-        const size = 64;
-        canvas.width = size;
-        canvas.height = size;
+        canvas.width = SIZE;
+        canvas.height = SIZE;
         const ctx = canvas.getContext("2d");
-        if (!ctx) { reject(new Error("No 2d context")); return; }
-        ctx.drawImage(img, 0, 0, size, size);
-        const data = ctx.getImageData(0, 0, size, size).data;
+        if (!ctx) { reject(new Error("no 2d ctx")); return; }
+        ctx.drawImage(img, 0, 0, SIZE, SIZE);
+        const raw = ctx.getImageData(0, 0, SIZE, SIZE).data;
 
-        let totalBrightness = 0, brightPixels = 0;
-        const pixelCount = data.length / 4;
-        for (let i = 0; i < data.length; i += 4) {
-          const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-          totalBrightness += lum;
-          if (lum > 20) brightPixels++;
+        const lums = new Float32Array(SIZE * SIZE);
+        for (let i = 0; i < SIZE * SIZE; i++) {
+          lums[i] = 0.299 * raw[i * 4] + 0.587 * raw[i * 4 + 1] + 0.114 * raw[i * 4 + 2];
         }
 
-        const meanBrightness = totalBrightness / pixelCount;
-        const fovRatio = brightPixels / pixelCount;
+        // ── Brightness ──
+        let sum = 0;
+        for (let i = 0; i < lums.length; i++) sum += lums[i];
+        const mean = sum / lums.length;
+        // Ideal retinal image mean: 80-160; map 0-255 to 0-100 with peak at ~120
+        const brightness = mean < 40
+          ? Math.round((mean / 40) * 40)                            // very dark 0-40
+          : mean <= 160
+            ? Math.round(40 + ((mean - 40) / 120) * 60)            // good zone 40-100
+            : Math.max(0, Math.round(100 - ((mean - 160) / 95) * 60)); // overexposed
 
-        const brightness = meanBrightness >= 80 && meanBrightness <= 160
-          ? 100
-          : meanBrightness < 80
-            ? Math.round((meanBrightness / 80) * 100)
-            : Math.max(0, Math.round(100 - ((meanBrightness - 160) / 95) * 100));
+        // ── Contrast (std dev) ──
+        let varSum = 0;
+        for (let i = 0; i < lums.length; i++) varSum += (lums[i] - mean) ** 2;
+        const stdDev = Math.sqrt(varSum / lums.length);
+        const contrast = Math.min(100, Math.round((stdDev / 60) * 100));
 
-        const fov = Math.min(100, Math.round((fovRatio / 0.65) * 100));
-
-        // Rough blur estimate: high variance of luminance differences
-        let variance = 0;
-        const lums: number[] = [];
-        for (let i = 0; i < data.length; i += 4) {
-          lums.push(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+        // ── Field of View (circular mask fill) ──
+        // Retinal fundus images: bright circular disc on dark background
+        // Count pixels in inscribed circle that are above dark-border threshold
+        const cx = SIZE / 2, cy = SIZE / 2, r = SIZE / 2;
+        let inCircle = 0, brightInCircle = 0;
+        const FOV_THRESHOLD = 18; // pixels darker than this = outside retinal disc
+        for (let y = 0; y < SIZE; y++) {
+          for (let x = 0; x < SIZE; x++) {
+            const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+            if (dist <= r) {
+              inCircle++;
+              if (lums[y * SIZE + x] > FOV_THRESHOLD) brightInCircle++;
+            }
+          }
         }
-        const mean = lums.reduce((a, b) => a + b, 0) / lums.length;
-        variance = lums.reduce((a, b) => a + (b - mean) ** 2, 0) / lums.length;
-        const blur = Math.min(100, Math.round((variance / 1200) * 100));
+        const fovRatio = brightInCircle / inCircle;
+        const fov = Math.min(100, Math.round((fovRatio / 0.72) * 100));
 
-        resolve({ brightness, fov, blur });
-      } catch (e) {
-        reject(e);
-      }
+        // ── Sharpness (Laplacian variance) ──
+        // Convolve with simple 3x3 Laplacian [-1,-1,-1,-1,8,-1,-1,-1,-1]
+        let lapVar = 0;
+        let lapN = 0;
+        for (let y = 1; y < SIZE - 1; y++) {
+          for (let x = 1; x < SIZE - 1; x++) {
+            const c = lums[y * SIZE + x];
+            const lap =
+              8 * c
+              - lums[(y-1)*SIZE + (x-1)] - lums[(y-1)*SIZE + x] - lums[(y-1)*SIZE + (x+1)]
+              - lums[y*SIZE + (x-1)]                              - lums[y*SIZE + (x+1)]
+              - lums[(y+1)*SIZE + (x-1)] - lums[(y+1)*SIZE + x] - lums[(y+1)*SIZE + (x+1)];
+            lapVar += lap * lap;
+            lapN++;
+          }
+        }
+        const lapMean = lapVar / lapN;
+        // Empirically: sharp retinal image ~2000-8000; blurry <200
+        const sharpness = Math.min(100, Math.round((lapMean / 3000) * 100));
+
+        // ── Illumination uniformity (centre vs ring) ──
+        let centreSum = 0, centreN = 0, ringSum = 0, ringN = 0;
+        const innerR = r * 0.40;
+        for (let y = 0; y < SIZE; y++) {
+          for (let x = 0; x < SIZE; x++) {
+            const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+            if (dist <= r) {
+              if (dist <= innerR) { centreSum += lums[y * SIZE + x]; centreN++; }
+              else { ringSum += lums[y * SIZE + x]; ringN++; }
+            }
+          }
+        }
+        const centreMean = centreN > 0 ? centreSum / centreN : mean;
+        const ringMean   = ringN   > 0 ? ringSum   / ringN   : mean;
+        const delta = Math.abs(centreMean - ringMean);
+        // delta 0 = perfect uniformity (100), delta 80+ = very non-uniform (0)
+        const illumination = Math.max(0, Math.round(100 - (delta / 80) * 100));
+
+        resolve({ sharpness, brightness, fov, contrast, illumination });
+      } catch (e) { reject(e); }
     };
     img.onerror = reject;
     img.src = uri;
