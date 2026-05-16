@@ -150,7 +150,7 @@ export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const r = useResponsive();
-  const { patients, screenings, consultations, appointments, unreadCount, isOnline, isSyncing, lastSyncAt, lastSyncError, refresh } = useApp();
+  const { patients, screenings, consultations, appointments, campaigns, unreadCount, isOnline, isSyncing, lastSyncAt, lastSyncError, refresh } = useApp();
   const { user, logout } = useAuth();
   const statsData = useStatsData();
   // Quick-action grid: 2 cols on phones, 3 on tablets, 4 on wide web.
@@ -192,6 +192,20 @@ export default function DashboardScreen() {
       .sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime())
       .slice(0, 3),
     [screenings],
+  );
+
+  const todayTechScreenings = useMemo(() => {
+    if (role !== "Technician") return [];
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    return screenings
+      .filter((s) => new Date(s.capturedAt) >= todayStart)
+      .sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime())
+      .slice(0, 5);
+  }, [screenings, role]);
+
+  const activeCampaign = useMemo(() =>
+    role === "Technician" ? campaigns.find((c) => c.status === "Active") : undefined,
+    [campaigns, role],
   );
 
   const activeConsultations = useMemo(() =>
@@ -258,6 +272,88 @@ export default function DashboardScreen() {
     permsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
     permTag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
     permTagText: { fontSize: 11, fontFamily: "Inter_500Medium" },
+    // Technician: Active Campaign Banner
+    campaignBanner: {
+      borderWidth: 1,
+      borderRadius: 14,
+      padding: 14,
+      gap: 10,
+    },
+    campaignBannerRow: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      gap: 12,
+    },
+    campaignIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+    },
+    campaignBannerLabel: {
+      fontSize: 10,
+      fontFamily: "Inter_700Bold",
+      letterSpacing: 0.8,
+      textTransform: "uppercase" as const,
+    },
+    campaignBannerName: {
+      fontSize: 15,
+      fontFamily: "Inter_700Bold",
+      marginTop: 1,
+    },
+    campaignBannerMeta: {
+      fontSize: 12,
+      fontFamily: "Inter_400Regular",
+      marginTop: 2,
+    },
+    campaignScreenBtn: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: 10,
+    },
+    campaignScreenBtnText: {
+      color: "#fff",
+      fontSize: 13,
+      fontFamily: "Inter_700Bold",
+    },
+    campaignProgressBar: {
+      height: 4,
+      borderRadius: 2,
+      overflow: "hidden" as const,
+    },
+    campaignProgressFill: {
+      height: 4,
+      borderRadius: 2,
+    },
+    // Technician: Today's Session
+    todayEmptyCard: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      gap: 14,
+      borderWidth: 1,
+      borderRadius: 14,
+      padding: 16,
+    },
+    todayEmptyIcon: {
+      width: 50,
+      height: 50,
+      borderRadius: 14,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+    },
+    todayEmptyTitle: {
+      fontSize: 15,
+      fontFamily: "Inter_600SemiBold",
+    },
+    todayEmptySub: {
+      fontSize: 12,
+      fontFamily: "Inter_400Regular",
+      marginTop: 3,
+    },
     // Patient-specific styles
     nextVisitCard: {
       borderRadius: 16, padding: 18, gap: 12,
@@ -336,6 +432,39 @@ export default function DashboardScreen() {
         onRetry={() => refresh()}
       />
 
+      {/* ── Technician: Active Campaign Banner ── */}
+      {role === "Technician" && activeCampaign && (() => {
+        const pct = activeCampaign.targetCount > 0
+          ? Math.min(100, Math.round((activeCampaign.screenedCount / activeCampaign.targetCount) * 100))
+          : 0;
+        return (
+          <View style={[styles.campaignBanner, { backgroundColor: colors.primary + "0d", borderColor: colors.primary + "35" }]}>
+            <View style={styles.campaignBannerRow}>
+              <View style={[styles.campaignIconWrap, { backgroundColor: colors.primary }]}>
+                <Feather name="map-pin" size={15} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.campaignBannerLabel, { color: colors.primary }]}>ACTIVE CAMPAIGN</Text>
+                <Text style={[styles.campaignBannerName, { color: colors.foreground }]} numberOfLines={1}>{activeCampaign.name}</Text>
+                <Text style={[styles.campaignBannerMeta, { color: colors.mutedForeground }]}>
+                  {activeCampaign.district} · {activeCampaign.screenedCount}/{activeCampaign.targetCount} screened ({pct}%)
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.campaignScreenBtn, { backgroundColor: colors.primary }]}
+                onPress={() => router.push(`/screening/new?campaignId=${activeCampaign.id}` as never)}
+                activeOpacity={0.85}
+              >
+                <Feather name="camera" size={14} color="#fff" />
+                <Text style={styles.campaignScreenBtnText}>Screen</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.campaignProgressBar, { backgroundColor: colors.border }]}>
+              <View style={[styles.campaignProgressFill, { width: `${pct}%` as any, backgroundColor: colors.primary }]} />
+            </View>
+          </View>
+        );
+      })()}
 
       {/* ── Patient: Next visit hero ── */}
       {role === "Patient" && myNextVisit && (
@@ -494,8 +623,47 @@ export default function DashboardScreen() {
         );
       })()}
 
-      {/* ── Recent Screenings (Admin, Doctor, Technician, CHW) ── */}
-      {role !== "Viewer" && role !== "Patient" && (
+      {/* ── Technician: Today's Session ── */}
+      {role === "Technician" && (
+        <View>
+          <SectionHeader
+            title="Today's Session"
+            actionLabel={todayTechScreenings.length > 0 ? "New Screening" : undefined}
+            onAction={todayTechScreenings.length > 0 ? () => router.push("/screening/new") : undefined}
+          />
+          {todayTechScreenings.length === 0 ? (
+            <TouchableOpacity
+              style={[styles.todayEmptyCard, { backgroundColor: colors.success + "0d", borderColor: colors.success + "35" }]}
+              onPress={() => router.push("/screening/new")}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.todayEmptyIcon, { backgroundColor: colors.success }]}>
+                <Feather name="camera" size={22} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.todayEmptyTitle, { color: colors.foreground }]}>No screenings yet today</Text>
+                <Text style={[styles.todayEmptySub, { color: colors.mutedForeground }]}>Tap to start your first retinal screening</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={colors.success} />
+            </TouchableOpacity>
+          ) : (
+            todayTechScreenings.map((s) => {
+              const pat = patients.find((p) => p.id === s.patientId);
+              return (
+                <ScreeningCard
+                  key={s.id}
+                  screening={s}
+                  patientName={pat ? `${pat.firstName} ${pat.lastName}` : undefined}
+                  onPress={() => router.push(`/screening/${s.id}`)}
+                />
+              );
+            })
+          )}
+        </View>
+      )}
+
+      {/* ── Recent Screenings (Admin, Doctor, CHW) ── */}
+      {role !== "Viewer" && role !== "Patient" && role !== "Technician" && (
         <View>
           <SectionHeader
             title="Recent Screenings"

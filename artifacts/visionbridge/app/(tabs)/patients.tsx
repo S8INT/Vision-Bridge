@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useApp } from "@/context/AppContext";
 import { Patient } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { PatientCard } from "@/components/PatientCard";
 
@@ -20,6 +21,8 @@ export default function PatientsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { patients, screenings } = useApp();
+  const { user } = useAuth();
+  const canScreen = user?.role === "Technician" || user?.role === "CHW" || user?.role === "Doctor" || user?.role === "Admin";
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "recent" | "urgent">("all");
 
@@ -139,6 +142,7 @@ export default function PatientsScreen() {
               lastScreeningStatus={last?.status}
               lastScreeningRisk={last?.aiRiskLevel}
               onPress={() => router.push(`/patient/${item.id}`)}
+              onScreen={canScreen ? () => router.push(`/screening/new?patientId=${item.id}`) : undefined}
             />
           );
         }}
