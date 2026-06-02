@@ -87,7 +87,7 @@ export default function LoginScreen() {
       >
         <View style={s.card}>
           <Text style={s.cardTitle}>Welcome back</Text>
-          <Text style={s.cardSubtitle}>Sign in to your clinical account</Text>
+          <Text style={s.cardSubtitle}>Sign in to your VisionBridge account</Text>
 
           {error ? (
             <View style={s.errorBox}>

@@ -1074,9 +1074,9 @@ router.get("/dppa/my-data", requireAuth, (req: Request, res: Response) => {
 
 /**
  * GET /auth/setup/status
- * Public endpoint — returns whether any Admin user exists in the tenant.
+ * Public endpoint — returns whether any user exists yet in the tenant.
  * Used by the mobile app on first launch to decide whether to show the
- * "Create first admin" screen.
+ * first-time onboarding screen (clinic admin OR individual first user).
  */
 router.get("/setup/status", async (_req: Request, res: Response) => {
   const tenantId = getDemoTenantId();
@@ -1085,8 +1085,7 @@ router.get("/setup/status", async (_req: Request, res: Response) => {
     return;
   }
   const allUsers = listUsers(tenantId);
-  const hasAdmin = allUsers.some((u) => u.role === "Admin" && u.isActive);
-  res.json({ needsSetup: !hasAdmin });
+  res.json({ needsSetup: allUsers.length === 0 });
 });
 
 const setupSchema = z.object({
