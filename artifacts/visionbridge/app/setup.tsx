@@ -278,26 +278,14 @@ export default function SetupScreen() {
               <Text style={s.cardTitle}>Welcome to VisionBridge</Text>
               <Text style={s.cardSubtitle}>How would you like to get started?</Text>
 
-              <TouchableOpacity style={[s.modeCard, s.modeCardClinic]} onPress={() => pickMode("clinic")} activeOpacity={0.85}>
-                <View style={[s.modeIconWrap, { backgroundColor: "rgba(14,165,233,0.12)" }]}>
-                  <Feather name="home" size={26} color={PRIMARY} />
-                </View>
-                <View style={s.modeTextWrap}>
-                  <Text style={s.modeTitle}>My clinic / hospital</Text>
-                  <Text style={s.modeSub}>Register your facility and create an admin account to manage staff, screenings, and referrals.</Text>
-                </View>
-                <Feather name="chevron-right" size={20} color="#94a3b8" />
+              <TouchableOpacity style={s.modeBtnPrimary} onPress={() => pickMode("clinic")} activeOpacity={0.85}>
+                <Feather name="home" size={18} color="#fff" />
+                <Text style={s.modeBtnPrimaryText}>Register my clinic / hospital</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={[s.modeCard, s.modeCardIndiv]} onPress={() => pickMode("individual")} activeOpacity={0.85}>
-                <View style={[s.modeIconWrap, { backgroundColor: "rgba(236,72,153,0.10)" }]}>
-                  <Feather name="user" size={26} color="#ec4899" />
-                </View>
-                <View style={s.modeTextWrap}>
-                  <Text style={s.modeTitle}>I'm an individual</Text>
-                  <Text style={s.modeSub}>Doctor, nurse, technician, community health worker, or patient — join on your own.</Text>
-                </View>
-                <Feather name="chevron-right" size={20} color="#94a3b8" />
+              <TouchableOpacity style={s.modeBtnOutline} onPress={() => pickMode("individual")} activeOpacity={0.85}>
+                <Feather name="user" size={18} color={PRIMARY} />
+                <Text style={s.modeBtnOutlineText}>I'm an individual</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={s.loginLink} onPress={() => router.replace("/login")}>
@@ -652,6 +640,22 @@ const s = StyleSheet.create({
   progressDot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: "#e2e8f0" },
   progressDotActive: { backgroundColor: PRIMARY },
   stepLabel: { fontSize: 11, fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 16 },
+
+  // ── Landing buttons ───────────────────────────────────────────────────────
+  modeBtnPrimary: {
+    height: 52, backgroundColor: PRIMARY, borderRadius: 14,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    marginTop: 8,
+    shadowColor: PRIMARY_DARK, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28, shadowRadius: 8, elevation: 6,
+  },
+  modeBtnPrimaryText: { fontSize: 15, fontWeight: "700", color: "#fff" },
+  modeBtnOutline: {
+    height: 52, borderRadius: 14, borderWidth: 2, borderColor: PRIMARY,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    marginTop: 12, backgroundColor: "#f0f9ff",
+  },
+  modeBtnOutlineText: { fontSize: 15, fontWeight: "700", color: PRIMARY },
 
   cardTitle: { fontSize: 21, fontWeight: "700", color: "#0f172a", marginBottom: 4 },
   cardSubtitle: { fontSize: 13, color: "#64748b", marginBottom: 18, lineHeight: 19 },
