@@ -4,6 +4,7 @@ import {
   Alert,
   Platform,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -17,6 +18,7 @@ import { useColors } from "@/hooks/useColors";
 import { useApp, RiskLevel, Screening } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/Badge";
+import { buildSessionReportHtml, buildSessionReportText } from "@/services/reportGenerator";
 
 const RISK_ORDER: RiskLevel[] = ["Normal", "Mild", "Moderate", "Severe", "Urgent"];
 
@@ -46,6 +48,7 @@ export default function SessionSummaryScreen() {
   const { user } = useAuth();
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const campaign = useMemo(
     () => campaigns.find((c) => c.id === campaignId),
@@ -93,6 +96,35 @@ export default function SessionSummaryScreen() {
   const today = new Date().toLocaleDateString("en-UG", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
+
+  async function handleExportPdf() {
+    if (!campaign || !user) return;
+    setExporting(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const technicianName = user.name ?? user.email ?? "Technician";
+      const params = { campaign, sessionScreenings, highRiskScreenings, patients, technicianName, today };
+
+      if (Platform.OS === "web") {
+        const html = buildSessionReportHtml(params);
+        const win = window.open("", "_blank");
+        if (win) { win.document.write(html); win.document.close(); win.print(); }
+        return;
+      }
+
+      const text = buildSessionReportText(params);
+      await Share.share(
+        { message: text, title: `${campaign.name} — Session Report` },
+        { dialogTitle: `Share session report via…` },
+      );
+    } catch (e: any) {
+      if (e?.message !== "User did not share") {
+        Alert.alert("Share failed", "Could not share the report. Please try again.");
+      }
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function handleSendReport() {
     if (!campaign || !user) return;
@@ -277,6 +309,41 @@ export default function SessionSummaryScreen() {
           </View>
         )}
 
+        {/* ── Share PDF ── */}
+        <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.sectionRow}>
+            <Feather name="file-text" size={15} color={colors.foreground} />
+            <Text style={[styles.sectionTitle, { color: colors.foreground, marginLeft: 6 }]}>Export as PDF</Text>
+          </View>
+          <Text style={[styles.sectionMeta, { color: colors.mutedForeground }]}>
+            Generate a full session report — share via WhatsApp, email, or save to device.
+            Includes campaign details, risk breakdown, and high-risk patient list.
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.exportBtn,
+              { backgroundColor: exporting ? colors.muted : colors.card, borderColor: colors.border },
+            ]}
+            onPress={handleExportPdf}
+            disabled={exporting}
+            activeOpacity={0.85}
+          >
+            {exporting ? (
+              <ActivityIndicator size="small" color={colors.mutedForeground} />
+            ) : (
+              <Feather name="download" size={16} color={colors.foreground} />
+            )}
+            <Text style={[styles.exportBtnText, { color: exporting ? colors.mutedForeground : colors.foreground }]}>
+              {exporting ? "Generating PDF…" : "Export & Share PDF"}
+            </Text>
+            {!exporting && (
+              <View style={styles.whatsappHint}>
+                <Feather name="share-2" size={12} color={colors.mutedForeground} />
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
         {/* ── Send Report ── */}
         <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Notify Supervising Doctor</Text>
@@ -438,6 +505,18 @@ const styles = StyleSheet.create({
   riskFinding: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   riskPatientRight: { alignItems: "flex-end", gap: 4 },
   escalatedTag: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  exportBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  exportBtnText: { flex: 1, fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  whatsappHint: { opacity: 0.5 },
   sentBadge: {
     flexDirection: "row",
     alignItems: "center",
