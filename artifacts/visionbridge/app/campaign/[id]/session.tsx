@@ -153,11 +153,11 @@ export default function CampaignSessionScreen() {
             )}
             <TouchableOpacity
               style={[styles.addBtn, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "35" }]}
-              onPress={() => router.push(`/screening/new?campaignId=${campaignId}&batch=1` as never)}
+              onPress={() => router.push(`/campaign/${campaignId}/register` as never)}
               activeOpacity={0.8}
             >
-              <Feather name="camera" size={15} color={colors.primary} />
-              <Text style={[styles.addBtnText, { color: colors.primary }]}>New</Text>
+              <Feather name="user-plus" size={15} color={colors.primary} />
+              <Text style={[styles.addBtnText, { color: colors.primary }]}>New Patient</Text>
             </TouchableOpacity>
           </View>
         </View>
