@@ -99,17 +99,22 @@ export default function CampaignSessionScreen() {
     );
   }
 
+  const sessionComplete = readyPatients.length === 0 && donePatients.length > 0 && search === "";
+
   type ListItem =
     | { kind: "header-ready" }
     | { kind: "header-done" }
     | { kind: "empty-ready" }
+    | { kind: "session-complete" }
     | { kind: "patient-ready"; patient: Patient }
     | { kind: "patient-done"; patient: Patient };
 
   const listData: ListItem[] = [
     { kind: "header-ready" },
     ...(readyPatients.length === 0
-      ? [{ kind: "empty-ready" } as ListItem]
+      ? sessionComplete
+        ? [{ kind: "session-complete" } as ListItem]
+        : [{ kind: "empty-ready" } as ListItem]
       : readyPatients.map((p) => ({ kind: "patient-ready", patient: p } as ListItem))),
     ...(donePatients.length > 0
       ? [
@@ -135,14 +140,26 @@ export default function CampaignSessionScreen() {
               {campaign.district} · Batch Session
             </Text>
           </View>
-          <TouchableOpacity
-            style={[styles.addBtn, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "35" }]}
-            onPress={() => router.push(`/screening/new?campaignId=${campaignId}&batch=1` as never)}
-            activeOpacity={0.8}
-          >
-            <Feather name="camera" size={15} color={colors.primary} />
-            <Text style={[styles.addBtnText, { color: colors.primary }]}>New</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {todaySessionScreenings.length > 0 && (
+              <TouchableOpacity
+                style={[styles.addBtn, { backgroundColor: colors.success + "18", borderColor: colors.success + "35" }]}
+                onPress={() => router.push(`/campaign/${campaignId}/summary` as never)}
+                activeOpacity={0.8}
+              >
+                <Feather name="bar-chart-2" size={15} color={colors.success} />
+                <Text style={[styles.addBtnText, { color: colors.success }]}>Summary</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.addBtn, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "35" }]}
+              onPress={() => router.push(`/screening/new?campaignId=${campaignId}&batch=1` as never)}
+              activeOpacity={0.8}
+            >
+              <Feather name="camera" size={15} color={colors.primary} />
+              <Text style={[styles.addBtnText, { color: colors.primary }]}>New</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Progress bar */}
@@ -241,6 +258,31 @@ export default function CampaignSessionScreen() {
                   {donePatients.length}
                 </Text>
               </View>
+            );
+          }
+          if (item.kind === "session-complete") {
+            return (
+              <TouchableOpacity
+                style={[styles.completeCard, { backgroundColor: colors.success + "0d", borderColor: colors.success + "40" }]}
+                onPress={() => router.push(`/campaign/${campaignId}/summary` as never)}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.completeIconWrap, { backgroundColor: colors.success }]}>
+                  <Feather name="check-circle" size={24} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.completeTitle, { color: colors.foreground }]}>
+                    All patients screened!
+                  </Text>
+                  <Text style={[styles.completeSub, { color: colors.mutedForeground }]}>
+                    {donePatients.length} screened today · Tap to view session summary
+                  </Text>
+                </View>
+                <View style={[styles.completeCta, { backgroundColor: colors.success }]}>
+                  <Feather name="bar-chart-2" size={14} color="#fff" />
+                  <Text style={styles.completeCtaText}>Summary</Text>
+                </View>
+              </TouchableOpacity>
             );
           }
           if (item.kind === "empty-ready") {
@@ -357,6 +399,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 17, fontFamily: "Inter_700Bold" },
   headerSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
+  headerActions: { flexDirection: "row", gap: 8 },
   addBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -367,6 +410,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   addBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  completeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    gap: 12,
+  },
+  completeIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  completeTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  completeSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3 },
+  completeCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  completeCtaText: { color: "#fff", fontSize: 12, fontFamily: "Inter_700Bold" },
   progressWrap: { marginBottom: 12 },
   progressLabelRow: {
     flexDirection: "row",
