@@ -8,6 +8,7 @@ interface Props {
   isSyncing: boolean;
   lastSyncAt: string | null;
   lastSyncError: string | null;
+  pendingCount?: number;
   onRetry: () => void;
 }
 
@@ -16,26 +17,31 @@ interface Props {
  *  - Online + last-synced relative time (auto-updates every 15s)
  *  - Spinner while a sync is in progress
  *  - Offline / error state (red) with a tap-to-retry affordance
+ *  - pendingCount badge — shows "N records pending sync" when offline records exist
  */
-export function SyncBanner({ isOnline, isSyncing, lastSyncAt, lastSyncError, onRetry }: Props) {
+export function SyncBanner({ isOnline, isSyncing, lastSyncAt, lastSyncError, pendingCount = 0, onRetry }: Props) {
   const colors = useColors();
   const [, force] = useState(0);
 
-  // Re-render once a minute so "2 min ago" stays accurate.
+  // Re-render every 15s so "2 min ago" stays accurate.
   useEffect(() => {
     const id = setInterval(() => force((n) => n + 1), 15_000);
     return () => clearInterval(id);
   }, []);
 
   const offline = !isOnline;
-  const bg = offline ? "#fef2f2" : colors.successLight;
-  const border = offline ? "#fecaca" : colors.normalBorder;
-  const fg = offline ? colors.destructive : colors.normalText;
+  const hasPending = pendingCount > 0;
+
+  // Colour logic: pending-offline = amber, plain-offline = red, online = green
+  const bg     = offline ? (hasPending ? "#fffbeb" : "#fef2f2") : colors.successLight;
+  const border = offline ? (hasPending ? "#fde68a" : "#fecaca") : colors.normalBorder;
+  const fg     = offline ? (hasPending ? "#b45309" : colors.destructive) : colors.normalText;
 
   const label = (() => {
-    if (isSyncing && !lastSyncAt) return "Syncing…";
+    if (isSyncing) return hasPending ? `Syncing ${pendingCount} record${pendingCount !== 1 ? "s" : ""}…` : "Syncing…";
+    if (offline && hasPending) return `Offline · ${pendingCount} record${pendingCount !== 1 ? "s" : ""} pending sync`;
     if (offline) return lastSyncAt ? `Offline · last synced ${formatRelative(lastSyncAt)}` : "Offline · waiting for connection";
-    if (isSyncing) return "Syncing…";
+    if (hasPending) return `Online · syncing ${pendingCount} queued record${pendingCount !== 1 ? "s" : ""}…`;
     if (!lastSyncAt) return "Online";
     return `Online · last synced ${formatRelative(lastSyncAt)}`;
   })();
@@ -54,9 +60,14 @@ export function SyncBanner({ isOnline, isSyncing, lastSyncAt, lastSyncError, onR
       )}
       <Text style={[s.text, { color: fg }]} numberOfLines={1}>
         {label}
-        {!!lastSyncError && offline ? "  ·  tap to retry" : ""}
+        {!!lastSyncError && offline && !hasPending ? "  ·  tap to retry" : ""}
       </Text>
-      {!isSyncing && (
+      {hasPending && !isSyncing && (
+        <View style={[s.badge, { backgroundColor: fg }]}>
+          <Text style={s.badgeText}>{pendingCount}</Text>
+        </View>
+      )}
+      {!isSyncing && !hasPending && (
         <Feather name="refresh-cw" size={12} color={fg} style={{ opacity: 0.6 }} />
       )}
     </TouchableOpacity>
@@ -88,4 +99,13 @@ const s = StyleSheet.create({
     borderWidth: 1,
   },
   text: { flex: 1, fontSize: 12, fontFamily: "Inter_500Medium" },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  badgeText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#fff" },
 });

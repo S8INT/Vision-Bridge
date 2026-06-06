@@ -9,8 +9,9 @@
  * No mock seed data — placeholders are gone.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./AuthContext";
+import clinicalQueue from "@/services/clinicalQueue";
 
 // ── Public types (kept stable so existing screens compile unchanged) ───────
 export type PatientSex = "M" | "F" | "Other";
@@ -201,8 +202,10 @@ interface AppContextType {
   isSyncing: boolean;
   lastSyncAt: string | null;
   lastSyncError: string | null;
+  pendingCount: number;
 
   refresh: () => Promise<void>;
+  flushClinicalQueue: () => Promise<void>;
 
   addPatient: (p: Omit<Patient, "id" | "registeredAt">) => Promise<Patient | null>;
   updatePatient: (id: string, updates: Partial<Patient>) => Promise<void>;
@@ -283,6 +286,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [lastSyncError, setLastSyncError] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const prevOnlineRef = useRef(true);
 
   const currentUser: CurrentUser = useMemo(() => {
     if (!user) return FALLBACK_USER;
@@ -364,7 +369,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const row = normaliseRow(item) as Patient;
       setPatients((prev) => [row, ...prev]);
       return row;
-    } catch (e) { console.warn("[addPatient]", (e as Error).message); return null; }
+    } catch (e) {
+      const msg = (e as Error).message ?? "";
+      const isNetErr = /Network request failed|Failed to fetch|TypeError/i.test(msg);
+      if (!isNetErr) { console.warn("[addPatient]", msg); return null; }
+      // Offline — store optimistically and queue for later sync
+      const tempId = `_offline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const optimistic: Patient = { ...p, id: tempId, registeredAt: new Date().toISOString() };
+      await clinicalQueue.enqueuePatient(tempId, p);
+      setPendingCount((n) => n + 1);
+      setPatients((prev) => [optimistic, ...prev]);
+      console.info("[addPatient] queued offline, tempId:", tempId);
+      return optimistic;
+    }
   }, [authedFetch]);
 
   const updatePatient = useCallback(async (id: string, updates: Partial<Patient>) => {
@@ -381,7 +398,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const row = normaliseRow(item) as Screening;
       setScreenings((prev) => [row, ...prev]);
       return row;
-    } catch (e) { console.warn("[addScreening]", (e as Error).message); return null; }
+    } catch (e) {
+      const msg = (e as Error).message ?? "";
+      const isNetErr = /Network request failed|Failed to fetch|TypeError/i.test(msg);
+      if (!isNetErr) { console.warn("[addScreening]", msg); return null; }
+      // Offline — store optimistically and queue for later sync
+      const tempId = `_offline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const optimistic: Screening = { ...s, id: tempId, capturedAt: new Date().toISOString() };
+      await clinicalQueue.enqueueScreening(tempId, s);
+      setPendingCount((n) => n + 1);
+      setScreenings((prev) => [optimistic, ...prev]);
+      console.info("[addScreening] queued offline, tempId:", tempId);
+      return optimistic;
+    }
   }, [authedFetch]);
 
   const updateScreening = useCallback(async (id: string, updates: Partial<Screening>) => {
@@ -499,6 +528,57 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     catch (e) { console.warn("[markAllNotificationsRead]", (e as Error).message); }
   }, [authedFetch]);
 
+  // ── Offline clinical queue flush ─────────────────────────────────────────
+  const flushClinicalQueue = useCallback(async () => {
+    const pending = await clinicalQueue.getPending();
+    if (pending.length === 0) return;
+
+    let synced = 0;
+    for (const item of pending) {
+      await clinicalQueue.markSyncing(item.queueId);
+      try {
+        if (item.type === "patient") {
+          const { item: apiItem } = await authedFetch("/patients", {
+            method: "POST",
+            body: JSON.stringify(item.payload),
+          });
+          const row = normaliseRow(apiItem) as Patient;
+          setPatients((prev) => prev.map((p) => (p.id === item.tempId ? row : p)));
+        } else {
+          const { item: apiItem } = await authedFetch("/clinical/screenings", {
+            method: "POST",
+            body: JSON.stringify(item.payload),
+          });
+          const row = normaliseRow(apiItem) as Screening;
+          setScreenings((prev) => prev.map((s) => (s.id === item.tempId ? row : s)));
+        }
+        await clinicalQueue.markSynced(item.queueId);
+        synced++;
+      } catch (e) {
+        await clinicalQueue.markFailed(item.queueId, (e as Error).message ?? "Unknown");
+      }
+    }
+
+    if (synced > 0) await clinicalQueue.clearSynced();
+    const stats = await clinicalQueue.getStats();
+    setPendingCount(stats.pending);
+    console.info(`[flushClinicalQueue] synced=${synced} stillPending=${stats.pending}`);
+  }, [authedFetch]);
+
+  // Load pending count from AsyncStorage on mount
+  useEffect(() => {
+    clinicalQueue.getStats().then((s) => setPendingCount(s.pending));
+  }, []);
+
+  // Auto-flush whenever connectivity transitions from offline → online
+  useEffect(() => {
+    const wasOffline = !prevOnlineRef.current;
+    prevOnlineRef.current = isOnline;
+    if (isOnline && wasOffline) {
+      flushClinicalQueue();
+    }
+  }, [isOnline, flushClinicalQueue]);
+
   // ── Selectors ───────────────────────────────────────────────────────────
   const getPatient = useCallback((id: string) => patients.find((p) => p.id === id), [patients]);
   const getScreeningsForPatient = useCallback(
@@ -523,8 +603,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         currentUser,
         patients, screenings, consultations, notifications,
         doctors, referrals, appointments, campaigns,
-        isOnline, isSyncing, lastSyncAt, lastSyncError,
-        refresh,
+        isOnline, isSyncing, lastSyncAt, lastSyncError, pendingCount,
+        refresh, flushClinicalQueue,
         addPatient, updatePatient,
         addScreening, updateScreening,
         addConsultation, updateConsultation, assignConsultation, assignRoundRobin,

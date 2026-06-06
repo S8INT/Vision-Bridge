@@ -150,7 +150,7 @@ export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const r = useResponsive();
-  const { patients, screenings, consultations, appointments, campaigns, unreadCount, isOnline, isSyncing, lastSyncAt, lastSyncError, refresh } = useApp();
+  const { patients, screenings, consultations, appointments, campaigns, unreadCount, isOnline, isSyncing, lastSyncAt, lastSyncError, pendingCount, refresh } = useApp();
   const { user, logout } = useAuth();
   const statsData = useStatsData();
   // Quick-action grid: 2 cols on phones, 3 on tablets, 4 on wide web.
@@ -429,6 +429,7 @@ export default function DashboardScreen() {
         isSyncing={isSyncing}
         lastSyncAt={lastSyncAt}
         lastSyncError={lastSyncError}
+        pendingCount={pendingCount}
         onRetry={() => refresh()}
       />
 

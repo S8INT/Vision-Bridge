@@ -1,0 +1,2 @@
+- [Clinical offline queue pattern](clinical-offline-queue.md) — addPatient/addScreening use optimistic tempIds when offline; flush auto-triggers on isOnline transition.
+- [expo-print/expo-sharing blocked](expo-blocked-packages.md) — cannot install in Replit sandbox; use RN Share API + window.print instead.
