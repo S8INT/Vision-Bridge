@@ -109,7 +109,8 @@ const qualStyles = StyleSheet.create({
 });
 
 export default function NewScreeningScreen() {
-  const { patientId: paramPatientId, campaignId } = useLocalSearchParams<{ patientId?: string; campaignId?: string }>();
+  const { patientId: paramPatientId, campaignId, batch } = useLocalSearchParams<{ patientId?: string; campaignId?: string; batch?: string }>();
+  const isBatch = batch === "1" && !!campaignId;
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { patients, addScreening, addConsultation, addNotification, currentUser, updateCampaign, campaigns } = useApp();
@@ -330,16 +331,26 @@ export default function NewScreeningScreen() {
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+    function goNext() {
+      if (isBatch) {
+        router.replace(`/campaign/${campaignId}/session` as never);
+      } else {
+        router.back();
+      }
+    }
+
     Alert.alert(
       isOfflineQueued ? "Screening Saved (Offline)" : "Screening Saved",
       isOfflineQueued
         ? "Image upload queued — will sync when connected."
         : highRisk
           ? `${aiResult.riskLevel} risk finding. Request specialist consultation?`
-          : "Screening saved successfully.",
+          : isBatch
+            ? "Screening saved. Ready for the next patient."
+            : "Screening saved successfully.",
       highRisk && !isOfflineQueued
         ? [
-            { text: "Later", onPress: () => router.back(), style: "cancel" },
+            { text: isBatch ? "Next Patient" : "Later", onPress: goNext, style: "cancel" },
             {
               text: "Request Consultation",
               onPress: () => {
@@ -356,7 +367,7 @@ export default function NewScreeningScreen() {
               },
             },
           ]
-        : [{ text: "Done", onPress: () => router.back() }]
+        : [{ text: isBatch ? "Next Patient" : "Done", onPress: goNext }]
     );
   }
 

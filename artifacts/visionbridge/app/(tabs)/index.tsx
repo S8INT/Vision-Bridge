@@ -452,11 +452,11 @@ export default function DashboardScreen() {
               </View>
               <TouchableOpacity
                 style={[styles.campaignScreenBtn, { backgroundColor: colors.primary }]}
-                onPress={() => router.push(`/screening/new?campaignId=${activeCampaign.id}` as never)}
+                onPress={() => router.push(`/campaign/${activeCampaign.id}/session` as never)}
                 activeOpacity={0.85}
               >
-                <Feather name="camera" size={14} color="#fff" />
-                <Text style={styles.campaignScreenBtnText}>Screen</Text>
+                <Feather name="play" size={14} color="#fff" />
+                <Text style={styles.campaignScreenBtnText}>Start Session</Text>
               </TouchableOpacity>
             </View>
             <View style={[styles.campaignProgressBar, { backgroundColor: colors.border }]}>
