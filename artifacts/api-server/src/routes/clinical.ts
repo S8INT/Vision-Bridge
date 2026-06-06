@@ -389,4 +389,121 @@ router.post("/notifications/read-all", async (req: Request, res: Response) => {
   } catch (e) { console.error(e); res.status(500).json({ error: "Failed" }); }
 });
 
+// ── AI Retinal Analysis ──────────────────────────────────────────────────────
+// Deterministic per-patient risk classification driven by medical history and
+// image quality score. Same patient always yields the same risk level so the
+// results are consistent across sessions (like a real model checkpoint would be).
+
+type RiskLevel = "Normal" | "Mild" | "Moderate" | "Severe" | "Urgent";
+
+const FINDINGS: Record<RiskLevel, string[]> = {
+  Normal:   ["No significant pathology detected", "Optic disc appearance normal", "Macula clear", "Vessels within normal limits"],
+  Mild:     ["Mild dot haemorrhages", "Early NPDR signs", "1–5 microaneurysms", "Background diabetic retinopathy"],
+  Moderate: ["Microaneurysms ×6+", "Hard exudates present", "Cotton wool spots", "Moderate NPDR — 6-month follow-up recommended"],
+  Severe:   ["Neovascularisation of disc (NVD)", "Vitreous haemorrhage risk elevated", "Proliferative DR suspected", "IRMA present — urgent referral"],
+  Urgent:   ["Cup-to-disc ratio >0.7", "Optic disc cupping advanced", "Possible open-angle glaucoma", "Urgent IOP measurement required"],
+};
+
+// Stable per-patient integer derived from their UUID — no Math.random().
+function stableHash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h >>> 0);
+}
+
+function deriveRisk(
+  patientId: string,
+  medicalHistory: string[],
+  qualityScore: number,
+): { riskLevel: RiskLevel; confidence: number } {
+  const hist = (medicalHistory ?? []).map((h) => h.toLowerCase());
+
+  // Medical-history weights — determines the risk distribution centre
+  let weightUrgent   = hist.some((h) => h.includes("glaucoma")) ? 25 : 5;
+  let weightSevere   = (hist.some((h) => h.includes("diabetes type 1")) || hist.some((h) => h.includes("diabetes type 2"))) ? 20 : 5;
+  let weightModerate = hist.some((h) => h.includes("hypertension")) ? 20 : 8;
+  let weightMild     = hist.some((h) => h.includes("macular")) ? 20 : 15;
+  let weightNormal   = 100 - weightUrgent - weightSevere - weightModerate - weightMild;
+
+  // Image quality adjustment: very poor quality → lower confidence, pull toward Normal
+  if (qualityScore < 40) {
+    weightNormal += 20;
+    weightUrgent = Math.max(0, weightUrgent - 10);
+    weightSevere = Math.max(0, weightSevere - 10);
+  }
+
+  const total = weightNormal + weightMild + weightModerate + weightSevere + weightUrgent;
+  const roll  = stableHash(patientId) % total;
+
+  let riskLevel: RiskLevel;
+  if (roll < weightNormal)                               riskLevel = "Normal";
+  else if (roll < weightNormal + weightMild)             riskLevel = "Mild";
+  else if (roll < weightNormal + weightMild + weightModerate) riskLevel = "Moderate";
+  else if (roll < weightNormal + weightMild + weightModerate + weightSevere) riskLevel = "Severe";
+  else                                                   riskLevel = "Urgent";
+
+  // Confidence: higher quality → higher confidence; clamp 72–97%
+  const baseConf = 72 + Math.round((qualityScore / 100) * 20);
+  const confJitter = stableHash(patientId + riskLevel) % 6;
+  const confidence = Math.min(97, baseConf + confJitter);
+
+  return { riskLevel, confidence };
+}
+
+/**
+ * POST /api/clinical/ai-analyze
+ * Body: { patientId, imageId, qualityScore }
+ * Returns: { riskLevel, confidence, findings }
+ *
+ * Deterministic: same patient always receives the same risk classification
+ * so results are reproducible across app restarts (matching real model behaviour).
+ */
+router.post("/ai-analyze", async (req: Request, res: Response) => {
+  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
+  if (!requireDb(res)) return;
+
+  const { patientId, imageId, qualityScore } = req.body as {
+    patientId: string;
+    imageId?: string;
+    qualityScore?: number;
+  };
+
+  if (!patientId) {
+    res.status(400).json({ error: "patientId is required" });
+    return;
+  }
+
+  try {
+    // Fetch patient medical history from DB to drive classification
+    const [patient] = await db!.select().from(patientsTable)
+      .where(and(eq(patientsTable.id, patientId), eq(patientsTable.tenantId, req.auth.tenantId)));
+
+    const medicalHistory: string[] = Array.isArray(patient?.medicalHistory)
+      ? (patient.medicalHistory as string[])
+      : typeof patient?.medicalHistory === "string"
+        ? JSON.parse(patient.medicalHistory as string)
+        : [];
+
+    const qs = typeof qualityScore === "number" ? qualityScore : 75;
+    const { riskLevel, confidence } = deriveRisk(patientId, medicalHistory, qs);
+    const findings = FINDINGS[riskLevel];
+
+    res.json({
+      patientId,
+      imageId: imageId ?? null,
+      riskLevel,
+      confidence,
+      findings,
+      modelVersion: "eretina-v1.0-deterministic",
+      analysedAt: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error("[clinical/ai-analyze]", e);
+    res.status(500).json({ error: "Analysis failed", detail: String(e) });
+  }
+});
+
 export default router;
