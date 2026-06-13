@@ -72,7 +72,6 @@ export default function LoginScreen() {
           <Text style={s.logoEmoji}>👁</Text>
         </View>
         <Text style={s.appName}>Eretina</Text>
-        <Text style={s.tagline}>TeleOphthalmology Platform · Uganda</Text>
         <Text style={s.heroSub}>
           Connecting patients to specialist eye care — anywhere.
         </Text>
