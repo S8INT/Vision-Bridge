@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useApp, type Consultation, type Patient } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type FilterTab = "Active" | "Completed" | "All";
@@ -229,7 +230,7 @@ export default function MyConsultationsScreen() {
     if (localPatient) { setMyPatient(localPatient); return; }
     if (!accessToken) return;
     setLoadingProfile(true);
-    fetch(`${API_BASE}/patients/me`, {
+    fetchWithTimeout(`${API_BASE}/patients/me`, {
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     })
       .then(async (res) => {
@@ -257,7 +258,7 @@ export default function MyConsultationsScreen() {
     if (!accessToken) return;
     if (showSpinner) setLoadingConsults(true);
     try {
-      const res = await fetch(`${API_BASE}/clinical/my-consultations`, {
+      const res = await fetchWithTimeout(`${API_BASE}/clinical/my-consultations`, {
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       });
       if (res.ok) {

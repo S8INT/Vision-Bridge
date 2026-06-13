@@ -8,6 +8,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
+import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ async function apiFetch(
   options: RequestInit & { authHeaders: Record<string, string> },
 ): Promise<Response> {
   const { authHeaders, ...rest } = options;
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     ...rest,
     headers: {
       "Content-Type": "application/json",
@@ -84,6 +85,7 @@ async function parseErrorMessage(res: Response): Promise<string> {
 export function useStaffDirectory() {
   const { getAuthHeaders } = useAuth();
   const queryClient = useQueryClient();
+
   const API_BASE = `${process.env["EXPO_PUBLIC_API_URL"] ?? ""}/api`;
 
   // ── List ──────────────────────────────────────────────────────────────────

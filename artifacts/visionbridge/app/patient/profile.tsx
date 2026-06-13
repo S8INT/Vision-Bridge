@@ -17,6 +17,7 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useAuth } from "@/context/AuthContext";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 
 const API_BASE = `${process.env["EXPO_PUBLIC_API_URL"] ?? ""}/api`;
 
@@ -92,7 +93,7 @@ export default function PatientProfileScreen() {
     (async () => {
       if (!accessToken) { setLoading(false); return; }
       try {
-        const res = await fetch(`${API_BASE}/patients/me`, {
+        const res = await fetchWithTimeout(`${API_BASE}/patients/me`, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
         if (cancelled) return;
@@ -157,7 +158,7 @@ export default function PatientProfileScreen() {
     };
 
     try {
-      const res = await fetch(`${API_BASE}/patients/me`, {
+      const res = await fetchWithTimeout(`${API_BASE}/patients/me`, {
         method: isNew ? "POST" : "PUT",
         headers: {
           Authorization: `Bearer ${accessToken}`,

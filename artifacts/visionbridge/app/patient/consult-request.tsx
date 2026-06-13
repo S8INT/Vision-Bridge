@@ -20,6 +20,7 @@ import { useColors } from "@/hooks/useColors";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useApp, type Patient, type Doctor } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 
 const SPECIALTIES = [
   { id: "general",  label: "General Eye Care",       icon: "eye" },
@@ -77,7 +78,7 @@ export default function ConsultRequestScreen() {
     }
     if (!accessToken) return;
     setLoadingProfile(true);
-    fetch(`${API_BASE}/patients/me`, {
+    fetchWithTimeout(`${API_BASE}/patients/me`, {
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     })
       .then(async (res) => {
@@ -102,7 +103,7 @@ export default function ConsultRequestScreen() {
   useEffect(() => {
     if (!accessToken) return;
     setLoadingDoctors(true);
-    fetch(`${API_BASE}/clinical/ophthalmologists`, {
+    fetchWithTimeout(`${API_BASE}/clinical/ophthalmologists`, {
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     })
       .then(async (res) => {
@@ -176,7 +177,7 @@ export default function ConsultRequestScreen() {
     if (selectedDoctorId) body.preferredDoctorId = selectedDoctorId;
 
     try {
-      const res = await fetch(`${API_BASE}/clinical/patient-consult`, {
+      const res = await fetchWithTimeout(`${API_BASE}/clinical/patient-consult`, {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify(body),

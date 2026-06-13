@@ -6,6 +6,8 @@ import { Platform } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 
+import { fetchWithTimeout } from "../lib/fetchWithTimeout";
+
 const API_BASE = `${process.env["EXPO_PUBLIC_API_URL"] ?? ""}/api`;
 
 Notifications.setNotificationHandler({
@@ -57,7 +59,7 @@ async function registerForPushNotifications(): Promise<string | null> {
 
 async function savePushToken(token: string, accessToken: string): Promise<void> {
   try {
-    await fetch(`${API_BASE}/auth/push-token`, {
+    await fetchWithTimeout(`${API_BASE}/auth/push-token`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",

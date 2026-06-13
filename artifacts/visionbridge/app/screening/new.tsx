@@ -41,6 +41,7 @@ import {
   QualityCheckError,
 } from "@/services/imagingService";
 import offlineQueue from "@/services/offlineQueue";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { Badge } from "@/components/ui/Badge";
 import ImageQualityChecker from "@/components/ImageQualityChecker";
 
@@ -277,7 +278,7 @@ export default function NewScreeningScreen() {
   async function runAIAnalysis(imageId: string) {
     try {
       const qualityScore = uploadResult?.qualityScore?.overall ?? qualityResult?.overall ?? 75;
-      const res = await fetch(`${API_BASE}/clinical/ai-analyze`, {
+      const res = await fetchWithTimeout(`${API_BASE}/clinical/ai-analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ patientId: selectedPatientId, imageId, qualityScore }),

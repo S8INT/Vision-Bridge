@@ -11,6 +11,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import * as SecureStore from "expo-secure-store";
+import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const stored = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
       if (!stored) return false;
 
-      const res = await fetch(`${API_BASE}/auth/refresh`, {
+      const res = await fetchWithTimeout(`${API_BASE}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refreshToken: stored }),
@@ -192,7 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const meRes = await fetch(`${API_BASE}/auth/me`, {
+        const meRes = await fetchWithTimeout(`${API_BASE}/auth/me`, {
           headers: { Authorization: `Bearer ${newToken}` },
         });
 
@@ -231,7 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     deviceInfo?: DeviceInfo,
   ): Promise<LoginResult> => {
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const res = await fetchWithTimeout(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -285,7 +286,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkSetupStatus = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await fetch(`${API_BASE}/auth/setup/status`);
+      const res = await fetchWithTimeout(`${API_BASE}/auth/setup/status`);
       if (!res.ok) return false;
       const data = await res.json() as { needsSetup: boolean };
       return data.needsSetup;
@@ -301,7 +302,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     deviceInfo?: DeviceInfo,
   ): Promise<AdminSetupResult> => {
     try {
-      const res = await fetch(`${API_BASE}/auth/setup`, {
+      const res = await fetchWithTimeout(`${API_BASE}/auth/setup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -348,7 +349,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     deviceInfo?: DeviceInfo,
   ): Promise<RegisterResult> => {
     try {
-      const res = await fetch(`${API_BASE}/auth/register`, {
+      const res = await fetchWithTimeout(`${API_BASE}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -394,7 +395,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const sessionToken = mfaSessionTokenRef.current;
     if (!sessionToken) throw new Error("No pending MFA challenge");
 
-    const res = await fetch(`${API_BASE}/auth/mfa/verify`, {
+    const res = await fetchWithTimeout(`${API_BASE}/auth/mfa/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code, sessionToken }),
@@ -430,7 +431,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async (allDevices = false): Promise<void> => {
     try {
       if (state.accessToken) {
-        await fetch(`${API_BASE}/auth/logout${allDevices ? "?all=true" : ""}`, {
+        await fetchWithTimeout(`${API_BASE}/auth/logout${allDevices ? "?all=true" : ""}`, {
           method: "POST",
           headers: { Authorization: `Bearer ${state.accessToken}` },
         });

@@ -12,6 +12,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./AuthContext";
 import clinicalQueue from "@/services/clinicalQueue";
+import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 
 // ── Public types (kept stable so existing screens compile unchanged) ───────
 export type PatientSex = "M" | "F" | "Other";
@@ -303,7 +304,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── HTTP helper ─────────────────────────────────────────────────────────
   const authedFetch = useCallback(async (path: string, init?: RequestInit) => {
     if (!accessToken) throw new Error("Not authenticated");
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetchWithTimeout(`${API_BASE}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",

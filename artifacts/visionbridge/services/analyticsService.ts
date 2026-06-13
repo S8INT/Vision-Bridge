@@ -13,6 +13,7 @@
 
 import { Platform, Share } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 import type {
   Patient, Screening, Consultation, Referral, Campaign,
   RiskLevel,
@@ -411,7 +412,7 @@ export async function pushToDHIS2(
   for (const s of screenings) byRisk[s.aiRiskLevel]++;
 
   try {
-    const resp = await fetch(`${API_BASE}/analytics/dhis2/push`, {
+    const resp = await fetchWithTimeout(`${API_BASE}/analytics/dhis2/push`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -462,7 +463,7 @@ export async function pushAggregate(
   };
 
   try {
-    await fetch(`${API_BASE}/analytics/aggregate`, {
+    await fetchWithTimeout(`${API_BASE}/analytics/aggregate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
