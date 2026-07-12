@@ -14,12 +14,12 @@ import { useAuth, type UserRole } from "@/context/AuthContext";
 // ── Per-role tab visibility ───────────────────────────────────────────────────
 // Based on 5.3 RBAC Permission Matrix (VisionBridge UG v1.0) + Patient flow
 const TAB_VISIBILITY: Record<UserRole, Record<string, boolean>> = {
-  Admin:      { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: true,  notifications: true,  visits: false, reports: false, education: false, "my-consultations": false },
-  Doctor:     { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: false, notifications: true,  visits: false, reports: false, education: false, "my-consultations": false },
-  Technician: { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: true,  visits: false, reports: false, education: false, "my-consultations": false },
-  CHW:        { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: false, visits: false, reports: false, education: false, "my-consultations": false },
-  Viewer:     { index: true, patients: false, consultations: false, analytics: true,  campaigns: false, notifications: false, visits: false, reports: false, education: false, "my-consultations": false },
-  Patient:    { index: true, patients: false, consultations: false, analytics: false, campaigns: false, notifications: true,  visits: true,  reports: true,  education: true,  "my-consultations": true  },
+  Admin:      { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: true,  notifications: true,  visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
+  Doctor:     { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: false, notifications: true,  visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
+  Technician: { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: true,  visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
+  CHW:        { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: false, visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
+  Viewer:     { index: true, patients: false, consultations: false, analytics: true,  campaigns: false, notifications: false, visits: false, reports: false, education: false, "my-consultations": false, queue: false },
+  Patient:    { index: true, patients: false, consultations: false, analytics: false, campaigns: false, notifications: true,  visits: true,  reports: true,  education: true,  "my-consultations": true,  queue: false },
 };
 
 function useTabVisible(tabName: string): boolean {
@@ -96,7 +96,15 @@ function NativeTabLayout() {
         </NativeTabs.Trigger>
       )}
 
-      {/* 5. Alerts — always last */}
+      {/* 5. Queue — offline upload manager */}
+      {vis.queue && (
+        <NativeTabs.Trigger name="queue">
+          <Icon sf={{ default: "icloud.and.arrow.up", selected: "icloud.and.arrow.up.fill" }} />
+          <Label>Queue</Label>
+        </NativeTabs.Trigger>
+      )}
+
+      {/* 6. Alerts — always last */}
       {vis.notifications && (
         <NativeTabs.Trigger name="notifications">
           <Icon sf={{ default: "bell", selected: "bell.fill" }} />
@@ -127,6 +135,7 @@ function ClassicTabLayout() {
   const showCampaigns        = useTabVisible("campaigns");
   const showNotifications    = useTabVisible("notifications");
   const showMyConsultations  = useTabVisible("my-consultations");
+  const showQueue            = useTabVisible("queue");
 
   const hide = { tabBarButton: () => null } as const;
 
@@ -254,7 +263,18 @@ function ClassicTabLayout() {
         }}
       />
 
-      {/* 5. Alerts — always last */}
+      {/* 5. Offline upload queue */}
+      <Tabs.Screen
+        name="queue"
+        options={{
+          title: "Queue",
+          ...(showQueue ? {} : hide),
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="icloud.and.arrow.up" tintColor={color} size={24} /> : <Feather name="upload-cloud" size={24} color={color} />,
+        }}
+      />
+
+      {/* 6. Alerts — always last */}
       <Tabs.Screen
         name="notifications"
         options={{
