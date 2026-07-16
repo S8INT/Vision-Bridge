@@ -3,10 +3,10 @@ name: Expo dev environment quirks
 description: Non-obvious Expo CLI, Metro, and expo-file-system behaviors in this workspace
 ---
 
-## Expo CLI login prompt blocks Metro
-- `expo start` blocks on an interactive "Log in / Proceed anonymously" prompt when run in a workflow. `--non-interactive` is ignored (CLI warns it's unsupported). The working fix is prefixing the dev script with `CI=1`.
-- **Why:** Without it, Metro never starts and Expo Go can't connect.
-- **How to apply:** Trade-off — CI mode disables Metro file watching/hot reload, so the `artifacts/visionbridge: expo` workflow must be restarted after any code change for the change to be served.
+## Expo CLI login prompt blocks Metro — use EXPO_OFFLINE=1, not CI=1
+- `expo start` blocks on an interactive "Log in / Proceed anonymously" prompt. `--non-interactive` is ignored. `CI=1` avoids the startup prompt BUT breaks Expo Go: when a device requests the manifest, the CLI throws "CommandError: Input is required, but 'npx expo' is in non-interactive mode" and the device can't load the app. `CI=1` also disables Metro file watching/hot reload.
+- **Fix:** prefix the dev script with `EXPO_OFFLINE=1` instead — skips all Expo account/signing checks, serves the manifest fine, and keeps watch mode/hot reload.
+- **How to verify:** `curl -H "expo-platform: ios" http://localhost:<port>/` should return HTTP 200 with a multipart manifest.
 
 ## expo-file-system v19 legacy API
 - In expo-file-system ≥19, the old API lives at `expo-file-system/legacy`; the main export is the new class-based API. Legacy `getInfoAsync` no longer accepts `{ size: true }` (InfoOptions only has `md5`); `size` is always included in the returned FileInfo.
