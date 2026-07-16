@@ -237,6 +237,7 @@ export default function QueueScreen() {
   // ── Single retry ────────────────────────────────────────────────────────────
 
   const handleRetry = useCallback(async (queueId: string) => {
+    if (retryingAll || retryingIds.has(queueId)) return;
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRetryingIds((prev) => new Set(prev).add(queueId));
     try {
@@ -248,7 +249,7 @@ export default function QueueScreen() {
     } finally {
       setRetryingIds((prev) => { const n = new Set(prev); n.delete(queueId); return n; });
     }
-  }, [loadItems]);
+  }, [loadItems, retryingAll, retryingIds]);
 
   // ── Discard ─────────────────────────────────────────────────────────────────
 
@@ -274,8 +275,12 @@ export default function QueueScreen() {
   // ── Retry all failed ────────────────────────────────────────────────────────
 
   const handleRetryAll = useCallback(async () => {
+    if (retryingAll) return;
     const retryable = items.filter(
-      (i) => i.status === "failed" && i.retries < offlineQueue.MAX_RETRIES
+      (i) =>
+        i.status === "failed" &&
+        i.retries < offlineQueue.MAX_RETRIES &&
+        !retryingIds.has(i.queueId)
     );
     if (retryable.length === 0) return;
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -293,7 +298,7 @@ export default function QueueScreen() {
         ? `${ok} image${ok !== 1 ? "s" : ""} uploaded${fail > 0 ? `, ${fail} still failed` : " successfully"}.`
         : `All ${fail} upload${fail !== 1 ? "s" : ""} failed. Check your connection and try again.`
     );
-  }, [items, loadItems]);
+  }, [items, loadItems, retryingAll, retryingIds]);
 
   // ── Clear uploaded ──────────────────────────────────────────────────────────
 

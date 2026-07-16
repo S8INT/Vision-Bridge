@@ -1,2 +1,1 @@
-- [Clinical offline queue pattern](clinical-offline-queue.md) — addPatient/addScreening use optimistic tempIds when offline; flush auto-triggers on isOnline transition.
-- [expo-print/expo-sharing blocked](expo-blocked-packages.md) — cannot install in Replit sandbox; use RN Share API + window.print instead.
+- [Expo dev quirks](expo-dev-quirks.md) — CI=1 needed to unblock Metro (disables hot reload → restart workflow after edits); expo-file-system v19 legacy path; tsconfig.base must stay esnext/bundler.

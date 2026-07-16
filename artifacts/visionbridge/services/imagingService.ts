@@ -9,7 +9,7 @@
  *  - DICOM export wrapper retrieval
  */
 
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 import offlineQueue, { QueueItem } from "./offlineQueue";
 import { fetchWithTimeout, UPLOAD_TIMEOUT_MS } from "../lib/fetchWithTimeout";
@@ -240,7 +240,7 @@ export async function checkImageQualityLocally(
 
 async function getFileSizeNative(uri: string): Promise<number | undefined> {
   try {
-    const info = await FileSystem.getInfoAsync(uri, { size: true });
+    const info = await FileSystem.getInfoAsync(uri);
     return info.exists ? ((info as any).size as number | undefined) : undefined;
   } catch {
     return undefined;
@@ -559,75 +559,96 @@ export class QualityCheckError extends Error {
   }
 }
 
+// In-flight lock: prevents the same queue item from being uploaded twice
+// concurrently (e.g. "Retry all" running while the user taps a single Retry).
+const inFlightRetries = new Set<string>();
+
 /**
  * Retry a single queued item — immediately uploads it to the server.
- * Throws if the device is offline or the item is not found.
- * Updates queue status (uploading → uploaded | failed) automatically.
+ * Throws if the device is offline, the item is not found, or it is
+ * already uploading. Any failure after the item is marked "uploading"
+ * rolls the status back to "failed" so it never gets stuck.
  */
 export async function retryQueueItem(
   queueId: string,
   onProgress?: (pct: number) => void
 ): Promise<void> {
+  if (inFlightRetries.has(queueId)) {
+    throw new Error("This image is already being uploaded");
+  }
+
   const all = await offlineQueue.getAll();
   const item = all.find((i) => i.queueId === queueId);
   if (!item) throw new Error(`Queue item ${queueId} not found`);
+  if (item.status === "uploading") {
+    throw new Error("This image is already being uploaded");
+  }
+  if (item.status === "uploaded") return;
 
   const isOnline = await checkConnectivity();
   if (!isOnline) throw new Error("Device is offline — cannot retry now");
 
+  inFlightRetries.add(queueId);
   await offlineQueue.markUploading(queueId);
 
-  const formData = new FormData();
-  if (Platform.OS === "web") {
-    const blob = await dataUriToBlob(item.imageUri);
-    formData.append("image", blob, "retinal.jpg");
-  } else {
-    formData.append("image", { uri: item.imageUri, type: "image/jpeg", name: "retinal.jpg" } as any);
-  }
-  formData.append("patientId", item.metadata.patientId);
-  formData.append("deviceId", item.metadata.deviceId);
-  formData.append("tenantId", item.metadata.tenantId);
-  formData.append("captureTime", item.metadata.captureTime);
-  if (item.metadata.eye) formData.append("eye", item.metadata.eye);
-  if (item.metadata.operatorId) formData.append("operatorId", item.metadata.operatorId);
-  if (item.metadata.campaignId) formData.append("campaignId", item.metadata.campaignId);
-
-  onProgress?.(10);
-
-  let simPct = 10;
-  const simTimer = onProgress
-    ? setInterval(() => {
-        const step =
-          simPct < 40 ? 5 + Math.random() * 5 :
-          simPct < 60 ? 2 + Math.random() * 3 :
-          0.5 + Math.random();
-        simPct = Math.min(simPct + step, 74);
-        onProgress(Math.round(simPct));
-      }, 350)
-    : null;
-
-  let response: Response;
   try {
-    response = await fetch(`${API_BASE}/imaging/upload`, {
-      method: "POST",
-      body: formData,
-    });
+    const formData = new FormData();
+    if (Platform.OS === "web") {
+      const blob = await dataUriToBlob(item.imageUri);
+      formData.append("image", blob, "retinal.jpg");
+    } else {
+      formData.append("image", { uri: item.imageUri, type: "image/jpeg", name: "retinal.jpg" } as any);
+    }
+    formData.append("patientId", item.metadata.patientId);
+    formData.append("deviceId", item.metadata.deviceId);
+    formData.append("tenantId", item.metadata.tenantId);
+    formData.append("captureTime", item.metadata.captureTime);
+    if (item.metadata.eye) formData.append("eye", item.metadata.eye);
+    if (item.metadata.operatorId) formData.append("operatorId", item.metadata.operatorId);
+    if (item.metadata.campaignId) formData.append("campaignId", item.metadata.campaignId);
+
+    onProgress?.(10);
+
+    let simPct = 10;
+    const simTimer = onProgress
+      ? setInterval(() => {
+          const step =
+            simPct < 40 ? 5 + Math.random() * 5 :
+            simPct < 60 ? 2 + Math.random() * 3 :
+            0.5 + Math.random();
+          simPct = Math.min(simPct + step, 74);
+          onProgress(Math.round(simPct));
+        }, 350)
+      : null;
+
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(`${API_BASE}/imaging/upload`, {
+        method: "POST",
+        body: formData,
+        timeoutMs: UPLOAD_TIMEOUT_MS,
+      });
+    } finally {
+      if (simTimer !== null) clearInterval(simTimer);
+    }
+
+    onProgress?.(80);
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Upload failed: ${response.status} — ${text}`);
+    }
+
+    const data = await response.json();
+    onProgress?.(100);
+    await offlineQueue.markUploaded(queueId, (data as { imageId?: string }).imageId ?? queueId);
+  } catch (err: any) {
+    // Roll back "uploading" so the item is never stuck; increments retry count.
+    await offlineQueue.markFailed(queueId, err?.message ?? "Upload failed");
+    throw err;
   } finally {
-    if (simTimer !== null) clearInterval(simTimer);
+    inFlightRetries.delete(queueId);
   }
-
-  onProgress?.(80);
-
-  if (!response.ok) {
-    const text = await response.text();
-    const msg = `Upload failed: ${response.status} — ${text}`;
-    await offlineQueue.markFailed(queueId, msg);
-    throw new Error(msg);
-  }
-
-  const data = await response.json();
-  onProgress?.(100);
-  await offlineQueue.markUploaded(queueId, (data as { imageId?: string }).imageId ?? queueId);
 }
 
 export type { QueueItem };
