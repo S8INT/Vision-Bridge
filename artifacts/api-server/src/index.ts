@@ -2,8 +2,7 @@ import http from "http";
 import app from "./app";
 import { handleUpgrade } from "./routes/signal";
 import { logger } from "./lib/logger";
-import { initAuthStore, getDemoTenantId, isDbAvailable } from "./lib/authStore";
-import { seedClinicalDemoData } from "./lib/clinicalSeed";
+import { initAuthStore } from "./lib/authStore";
 
 const rawPort = process.env["PORT"];
 
@@ -35,19 +34,15 @@ server.listen(port, () => {
   logger.info({ port }, "Server listening");
 });
 
-// Seed idempotent clinical demo data once auth store init resolves (DB mode only)
-initAuthStore()
-  .then(async () => {
-    if (!isDbAvailable()) return;
-    await seedClinicalDemoData(getDemoTenantId());
-  })
-  .catch((err) => {
-    if (process.env["NODE_ENV"] === "production") {
-      logger.fatal({ err }, "auth store initialization failed in production — shutting down");
-      server.close(() => process.exit(1));
-      // Force exit if close hangs
-      setTimeout(() => process.exit(1), 5000).unref();
-      return;
-    }
-    logger.error({ err }, "auth store init / clinical demo seed failed");
-  });
+// Initialize the auth store (DB-backed). No demo data is seeded — users
+// start on a clean database and everything they create persists.
+initAuthStore().catch((err) => {
+  if (process.env["NODE_ENV"] === "production") {
+    logger.fatal({ err }, "auth store initialization failed in production — shutting down");
+    server.close(() => process.exit(1));
+    // Force exit if close hangs
+    setTimeout(() => process.exit(1), 5000).unref();
+    return;
+  }
+  logger.error({ err }, "auth store init failed");
+});
