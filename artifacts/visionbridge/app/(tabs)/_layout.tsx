@@ -1,7 +1,7 @@
 import { BlurView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
-import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
+import { Badge, Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather } from "@expo/vector-icons";
 import React from "react";
@@ -10,107 +10,65 @@ import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import { useApp } from "@/context/AppContext";
 import { useAuth, type UserRole } from "@/context/AuthContext";
+import { useQueueAttention } from "@/hooks/useQueueAttention";
+import { getRoleNav, SCREEN_META, screenTitle } from "@/lib/navConfig";
 
-// ── Per-role tab visibility ───────────────────────────────────────────────────
-// Based on 5.3 RBAC Permission Matrix (VisionBridge UG v1.0) + Patient flow
-const TAB_VISIBILITY: Record<UserRole, Record<string, boolean>> = {
-  Admin:      { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: true,  notifications: true,  visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
-  Doctor:     { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: false, notifications: true,  visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
-  Technician: { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: true,  visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
-  CHW:        { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: false, visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
-  Viewer:     { index: true, patients: false, consultations: false, analytics: true,  campaigns: false, notifications: false, visits: false, reports: false, education: false, "my-consultations": false, queue: false },
-  Patient:    { index: true, patients: false, consultations: false, analytics: false, campaigns: false, notifications: true,  visits: true,  reports: true,  education: true,  "my-consultations": true,  queue: false },
-};
+// All routes in this group, in tab-bar display order. Placement per role
+// (tab vs More hub) is decided by getRoleNav in lib/navConfig.
+const ALL_SCREENS = [
+  "index",
+  "patients",
+  "visits",
+  "consultations",
+  "my-consultations",
+  "reports",
+  "education",
+  "campaigns",
+  "analytics",
+  "queue",
+  "notifications",
+] as const;
 
-function useTabVisible(tabName: string): boolean {
+function useNavState() {
   const { user } = useAuth();
+  const { unreadCount } = useApp();
   const role: UserRole = user?.role ?? "Viewer";
-  return TAB_VISIBILITY[role]?.[tabName] ?? false;
+  const nav = getRoleNav(role);
+  const queueInMore = nav.more.includes("queue");
+  const queueCount = useQueueAttention(queueInMore);
+  // Aggregate badge on the More tab: unread alerts (if Alerts lives in
+  // More) + uploads needing attention (if Queue lives in More).
+  const moreBadge =
+    (nav.more.includes("notifications") ? unreadCount : 0) +
+    (queueInMore ? queueCount : 0);
+  return { role, nav, unreadCount, moreBadge };
 }
 
 // ── Native (iOS Liquid Glass) Layout ─────────────────────────────────────────
 function NativeTabLayout() {
-  const { user } = useAuth();
-  const role: UserRole = user?.role ?? "Viewer";
-  const vis = TAB_VISIBILITY[role] ?? {};
+  const { role, nav, unreadCount, moreBadge } = useNavState();
+  const tabSet = new Set(nav.tabs);
 
   return (
     <NativeTabs>
-      {/* 1. Home — always first */}
-      <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>{role === "Patient" ? "Home" : "Dashboard"}</Label>
+      {ALL_SCREENS.map((name) => {
+        const meta = SCREEN_META[name];
+        const visible = tabSet.has(name);
+        return (
+          <NativeTabs.Trigger key={name} name={name} hidden={!visible}>
+            <Icon sf={{ default: meta.sf as any, selected: meta.sfSelected as any }} />
+            <Label>{screenTitle(name, role)}</Label>
+            {name === "notifications" && visible && unreadCount > 0 && (
+              <Badge>{String(unreadCount)}</Badge>
+            )}
+          </NativeTabs.Trigger>
+        );
+      })}
+      <NativeTabs.Trigger name="more" hidden={!nav.hasMore}>
+        <Icon sf={{ default: "ellipsis.circle", selected: "ellipsis.circle.fill" }} />
+        <Label>More</Label>
+        {nav.hasMore && moreBadge > 0 && <Badge>{String(moreBadge)}</Badge>}
       </NativeTabs.Trigger>
-
-      {/* 2. Daily work */}
-      {vis.patients && (
-        <NativeTabs.Trigger name="patients">
-          <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
-          <Label>Patients</Label>
-        </NativeTabs.Trigger>
-      )}
-      {vis.visits && (
-        <NativeTabs.Trigger name="visits">
-          <Icon sf={{ default: "calendar", selected: "calendar" }} />
-          <Label>Visits</Label>
-        </NativeTabs.Trigger>
-      )}
-
-      {/* 3. Engage */}
-      {vis.consultations && (
-        <NativeTabs.Trigger name="consultations">
-          <Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
-          <Label>Consults</Label>
-        </NativeTabs.Trigger>
-      )}
-      {vis["my-consultations"] && (
-        <NativeTabs.Trigger name="my-consultations">
-          <Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
-          <Label>Consults</Label>
-        </NativeTabs.Trigger>
-      )}
-      {vis.reports && (
-        <NativeTabs.Trigger name="reports">
-          <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
-          <Label>Reports</Label>
-        </NativeTabs.Trigger>
-      )}
-      {vis.education && (
-        <NativeTabs.Trigger name="education">
-          <Icon sf={{ default: "book", selected: "book.fill" }} />
-          <Label>Learn</Label>
-        </NativeTabs.Trigger>
-      )}
-
-      {/* 4. Outreach & insight */}
-      {vis.campaigns && (
-        <NativeTabs.Trigger name="campaigns">
-          <Icon sf={{ default: "map", selected: "map.fill" }} />
-          <Label>Campaigns</Label>
-        </NativeTabs.Trigger>
-      )}
-      {vis.analytics && (
-        <NativeTabs.Trigger name="analytics">
-          <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
-          <Label>Analytics</Label>
-        </NativeTabs.Trigger>
-      )}
-
-      {/* 5. Queue — offline upload manager */}
-      {vis.queue && (
-        <NativeTabs.Trigger name="queue">
-          <Icon sf={{ default: "icloud.and.arrow.up", selected: "icloud.and.arrow.up.fill" }} />
-          <Label>Queue</Label>
-        </NativeTabs.Trigger>
-      )}
-
-      {/* 6. Alerts — always last */}
-      {vis.notifications && (
-        <NativeTabs.Trigger name="notifications">
-          <Icon sf={{ default: "bell", selected: "bell.fill" }} />
-          <Label>Alerts</Label>
-        </NativeTabs.Trigger>
-      )}
     </NativeTabs>
   );
 }
@@ -122,20 +80,8 @@ function ClassicTabLayout() {
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
-  const { unreadCount } = useApp();
-  const { user } = useAuth();
-  const role: UserRole = user?.role ?? "Viewer";
-
-  const showVisits           = useTabVisible("visits");
-  const showReports          = useTabVisible("reports");
-  const showEducation        = useTabVisible("education");
-  const showPatients         = useTabVisible("patients");
-  const showConsultations    = useTabVisible("consultations");
-  const showAnalytics        = useTabVisible("analytics");
-  const showCampaigns        = useTabVisible("campaigns");
-  const showNotifications    = useTabVisible("notifications");
-  const showMyConsultations  = useTabVisible("my-consultations");
-  const showQueue            = useTabVisible("queue");
+  const { role, nav, unreadCount, moreBadge } = useNavState();
+  const tabSet = new Set(nav.tabs);
 
   const hide = { tabBarButton: () => null } as const;
 
@@ -175,114 +121,43 @@ function ClassicTabLayout() {
           ),
       }}
     >
-      {/* 1. Home — always first */}
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: role === "Patient" ? "Home" : "Dashboard",
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="house" tintColor={color} size={24} /> : <Feather name="home" size={24} color={color} />,
-        }}
-      />
+      {ALL_SCREENS.map((name) => {
+        const meta = SCREEN_META[name];
+        const visible = tabSet.has(name);
+        return (
+          <Tabs.Screen
+            key={name}
+            name={name}
+            options={{
+              title: screenTitle(name, role),
+              ...(visible ? {} : hide),
+              tabBarIcon: ({ color }) =>
+                isIOS ? (
+                  <SymbolView name={meta.sf as any} tintColor={color} size={24} />
+                ) : (
+                  <Feather name={meta.feather as any} size={24} color={color} />
+                ),
+              ...(name === "notifications"
+                ? { tabBarBadge: visible && unreadCount > 0 ? unreadCount : undefined }
+                : {}),
+            }}
+          />
+        );
+      })}
 
-      {/* 2. Daily work */}
+      {/* More hub — last tab, only for roles with overflow features */}
       <Tabs.Screen
-        name="patients"
+        name="more"
         options={{
-          title: "Patients",
-          ...(showPatients ? {} : hide),
+          title: "More",
+          ...(nav.hasMore ? {} : hide),
           tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="person.2" tintColor={color} size={24} /> : <Feather name="users" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="visits"
-        options={{
-          title: "Visits",
-          ...(showVisits ? {} : hide),
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="calendar" tintColor={color} size={24} /> : <Feather name="calendar" size={24} color={color} />,
-        }}
-      />
-
-      {/* 3. Engage */}
-      <Tabs.Screen
-        name="consultations"
-        options={{
-          title: "Consults",
-          ...(showConsultations ? {} : hide),
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="message.circle" tintColor={color} size={24} /> : <Feather name="message-circle" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="my-consultations"
-        options={{
-          title: "Consults",
-          ...(showMyConsultations ? {} : hide),
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="message.circle" tintColor={color} size={24} /> : <Feather name="message-circle" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="reports"
-        options={{
-          title: "Reports",
-          ...(showReports ? {} : hide),
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="doc.text" tintColor={color} size={24} /> : <Feather name="file-text" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="education"
-        options={{
-          title: "Learn",
-          ...(showEducation ? {} : hide),
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="book" tintColor={color} size={24} /> : <Feather name="book-open" size={24} color={color} />,
-        }}
-      />
-
-      {/* 4. Outreach & insight */}
-      <Tabs.Screen
-        name="campaigns"
-        options={{
-          title: "Campaigns",
-          ...(showCampaigns ? {} : hide),
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="map" tintColor={color} size={24} /> : <Feather name="map-pin" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="analytics"
-        options={{
-          title: "Analytics",
-          ...(showAnalytics ? {} : hide),
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="chart.bar" tintColor={color} size={24} /> : <Feather name="bar-chart-2" size={24} color={color} />,
-        }}
-      />
-
-      {/* 5. Offline upload queue */}
-      <Tabs.Screen
-        name="queue"
-        options={{
-          title: "Queue",
-          ...(showQueue ? {} : hide),
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="icloud.and.arrow.up" tintColor={color} size={24} /> : <Feather name="upload-cloud" size={24} color={color} />,
-        }}
-      />
-
-      {/* 6. Alerts — always last */}
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          title: "Alerts",
-          ...(showNotifications ? {} : hide),
-          tabBarIcon: ({ color }) =>
-            isIOS ? <SymbolView name="bell" tintColor={color} size={24} /> : <Feather name="bell" size={24} color={color} />,
-          tabBarBadge: showNotifications && unreadCount > 0 ? unreadCount : undefined,
+            isIOS ? (
+              <SymbolView name="ellipsis.circle" tintColor={color} size={24} />
+            ) : (
+              <Feather name="grid" size={24} color={color} />
+            ),
+          tabBarBadge: nav.hasMore && moreBadge > 0 ? moreBadge : undefined,
         }}
       />
     </Tabs>
