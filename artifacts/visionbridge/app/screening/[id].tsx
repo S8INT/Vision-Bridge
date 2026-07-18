@@ -54,6 +54,7 @@ export default function ScreeningDetailScreen() {
     );
   }
 
+  const activeScreening = screening;
   const riskColor = getRiskColor(screening.aiRiskLevel, colors);
 
   function handleRequestConsultation() {
@@ -62,14 +63,14 @@ export default function ScreeningDetailScreen() {
       return;
     }
     addConsultation({
-      screeningId: screening.id,
-      patientId: screening.patientId,
+      screeningId: activeScreening.id,
+      patientId: activeScreening.patientId,
       requestedBy: currentUser.id,
-      status: "Open",
-      priority: screening.aiRiskLevel === "Urgent" ? "Emergency" : screening.aiRiskLevel === "Severe" ? "Urgent" : "Routine",
+      status: "Pending",
+      priority: activeScreening.aiRiskLevel === "Urgent" ? "Emergency" : activeScreening.aiRiskLevel === "Severe" ? "Urgent" : "Routine",
       clinicalNotes: referralNotes.trim(),
     });
-    updateScreening(screening.id, { status: "Referred" });
+    updateScreening(activeScreening.id, { status: "Referred" });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowReferralForm(false);
     Alert.alert("Consultation Requested", "Your request has been sent to the specialist queue.");

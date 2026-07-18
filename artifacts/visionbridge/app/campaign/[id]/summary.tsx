@@ -102,7 +102,7 @@ export default function SessionSummaryScreen() {
     setExporting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      const technicianName = user.name ?? user.email ?? "Technician";
+      const technicianName = user.fullName || user.email || "Technician";
       const params = { campaign, sessionScreenings, highRiskScreenings, patients, technicianName, today };
 
       if (Platform.OS === "web") {

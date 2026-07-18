@@ -134,16 +134,17 @@ export default function ConsultationDetailScreen() {
     );
   }
 
+  const activeConsultation = consultation;
   const isClosed = consultation.status === "Completed" || consultation.status === "Cancelled";
   const statusColor = getStatusColor(consultation.status, colors);
 
   async function handleRoundRobinAssign() {
-    const doc = await assignRoundRobin(consultation.id);
+    const doc = await assignRoundRobin(activeConsultation.id);
     if (!doc) {
       Alert.alert("No Available Doctors", "All specialists are currently unavailable. Please assign manually.");
       return;
     }
-    addNotification({ type: "ConsultationUpdate", title: "Case Auto-Assigned", body: `${patient?.firstName} ${patient?.lastName}'s case assigned to ${doc.name} (round-robin)`, patientId: consultation.patientId, consultationId: consultation.id });
+    addNotification({ type: "ConsultationUpdate", title: "Case Auto-Assigned", body: `${patient?.firstName} ${patient?.lastName}'s case assigned to ${doc.name} (round-robin)`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert("Assigned", `Case assigned to ${doc.name} via round-robin.`);
     setShowAssignForm(false);
@@ -151,16 +152,16 @@ export default function ConsultationDetailScreen() {
 
   function handleManualAssign() {
     if (!selectedDoctorId) { Alert.alert("Select a Doctor", "Please select a specialist to assign."); return; }
-    assignConsultation(consultation.id, selectedDoctorId, "Manual");
+    assignConsultation(activeConsultation.id, selectedDoctorId, "Manual");
     const doc = doctors.find((d) => d.id === selectedDoctorId);
-    addNotification({ type: "ConsultationUpdate", title: "Case Manually Assigned", body: `${patient?.firstName} ${patient?.lastName}'s case assigned to ${doc?.name}`, patientId: consultation.patientId, consultationId: consultation.id });
+    addNotification({ type: "ConsultationUpdate", title: "Case Manually Assigned", body: `${patient?.firstName} ${patient?.lastName}'s case assigned to ${doc?.name}`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowAssignForm(false);
   }
 
   function handleSubmitResponse() {
     if (!response.trim()) { Alert.alert("Response Required", "Enter your clinical response."); return; }
-    updateConsultation(consultation.id, {
+    updateConsultation(activeConsultation.id, {
       status: "Reviewed",
       specialistResponse: response.trim(),
       diagnosisOverride: diagnosisOverride.trim() || undefined,
@@ -170,14 +171,14 @@ export default function ConsultationDetailScreen() {
       respondedAt: new Date().toISOString(),
       assignedTo: currentUser.name,
     });
-    addNotification({ type: "ConsultationUpdate", title: "Specialist Response Submitted", body: `${patient?.firstName} ${patient?.lastName}'s case has been reviewed`, patientId: consultation.patientId, consultationId: consultation.id });
+    addNotification({ type: "ConsultationUpdate", title: "Specialist Response Submitted", body: `${patient?.firstName} ${patient?.lastName}'s case has been reviewed`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowResponseForm(false);
     Alert.alert("Response Saved", "The referring clinician has been notified.");
   }
 
   function handleSaveCareCoord() {
-    updateConsultation(consultation.id, {
+    updateConsultation(activeConsultation.id, {
       careCoordinatorNotes: careNotes.trim() || undefined,
       followUpDate: followUpDate ? `${followUpDate}T09:00:00Z` : undefined,
     });
@@ -192,8 +193,8 @@ export default function ConsultationDetailScreen() {
       {
         text: "Complete",
         onPress: () => {
-          updateConsultation(consultation.id, { status: "Completed" });
-          addNotification({ type: "ConsultationUpdate", title: "Consultation Completed", body: `${patient?.firstName} ${patient?.lastName}'s care episode marked complete`, patientId: consultation.patientId, consultationId: consultation.id });
+          updateConsultation(activeConsultation.id, { status: "Completed" });
+          addNotification({ type: "ConsultationUpdate", title: "Consultation Completed", body: `${patient?.firstName} ${patient?.lastName}'s care episode marked complete`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         },
       },

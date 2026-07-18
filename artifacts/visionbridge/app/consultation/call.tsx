@@ -126,7 +126,7 @@ function AsyncPlayer({ blobUrl }: { blobUrl: string }) {
 }
 
 // ── Live preview during recording ─────────────────────────────────────────────
-function AsyncPreview({ previewRef }: { previewRef: React.RefObject<HTMLVideoElement> }) {
+function AsyncPreview({ previewRef }: { previewRef: React.RefObject<HTMLVideoElement | null> }) {
   if (Platform.OS !== "web") return null;
   return (
     /* @ts-ignore */

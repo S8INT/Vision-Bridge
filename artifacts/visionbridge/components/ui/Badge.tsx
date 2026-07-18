@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
 
-type BadgeVariant = "default" | "success" | "warning" | "destructive" | "referral" | "urgent" | "muted";
+type BadgeVariant = "default" | "success" | "warning" | "destructive" | "referral" | "urgent" | "muted" | "mild";
 
 interface BadgeProps {
   label: string;
@@ -24,6 +24,8 @@ export function Badge({ label, variant = "default", size = "md" }: BadgeProps) {
         return { bg: colors.urgentBg, text: colors.urgentText };
       case "referral":
         return { bg: colors.referralBg, text: colors.referralText };
+      case "mild":
+        return { bg: "#ecfccb", text: "#3f6212" };
       case "muted":
         return { bg: colors.muted, text: colors.mutedForeground };
       default:
