@@ -51,6 +51,29 @@ router.get("/bootstrap", async (req: Request, res: Response) => {
   }
 });
 
+// ── Status validation ───────────────────────────────────────────────────────
+// Allowed status values per resource — mirrors the unions in
+// artifacts/visionbridge/context/AppContext.tsx. Keep these in sync.
+const CONSULTATION_STATUSES = ["Pending", "Assigned", "InReview", "Reviewed", "Referred", "Completed", "Cancelled"] as const;
+const SCREENING_STATUSES    = ["Pending", "Screened", "Reviewed", "Referred"] as const;
+const REFERRAL_STATUSES     = ["Pending", "Accepted", "InTransit", "Arrived", "Completed", "Declined"] as const;
+const APPOINTMENT_STATUSES  = ["Requested", "Confirmed", "Completed", "Cancelled", "NoShow"] as const;
+const CAMPAIGN_STATUSES     = ["Planned", "Active", "Completed", "Cancelled"] as const;
+
+/**
+ * If the request body contains a `status` field, verify it is one of the
+ * allowed values. Sends a 400 response and returns false when invalid.
+ */
+function validateStatus(req: Request, res: Response, allowed: readonly string[]): boolean {
+  if (!("status" in (req.body ?? {}))) return true;
+  const status = req.body.status;
+  if (typeof status === "string" && allowed.includes(status)) return true;
+  res.status(400).json({
+    error: `Invalid status ${JSON.stringify(status)}. Allowed values: ${allowed.join(", ")}`,
+  });
+  return false;
+}
+
 // ── Generic CRUD helpers ────────────────────────────────────────────────────
 function makeListRoute<T>(table: any) {
   return async (req: Request, res: Response) => {
@@ -63,10 +86,11 @@ function makeListRoute<T>(table: any) {
   };
 }
 
-function makeCreateRoute(table: any, prefill?: (req: Request) => Record<string, unknown>) {
+function makeCreateRoute(table: any, prefill?: (req: Request) => Record<string, unknown>, allowedStatuses?: readonly string[]) {
   return async (req: Request, res: Response) => {
     if (!req.auth) { res.status(401).end(); return; }
     if (!requireDb(res)) return;
+    if (allowedStatuses && !validateStatus(req, res, allowedStatuses)) return;
     try {
       const values = { tenantId: req.auth.tenantId, ...(prefill ? prefill(req) : {}), ...req.body };
       const [row] = (await db!.insert(table).values(values).returning()) as Record<string, unknown>[];
@@ -75,10 +99,11 @@ function makeCreateRoute(table: any, prefill?: (req: Request) => Record<string, 
   };
 }
 
-function makePatchRoute(table: any) {
+function makePatchRoute(table: any, allowedStatuses?: readonly string[]) {
   return async (req: Request, res: Response) => {
     if (!req.auth) { res.status(401).end(); return; }
     if (!requireDb(res)) return;
+    if (allowedStatuses && !validateStatus(req, res, allowedStatuses)) return;
     const { id } = req.params;
     try {
       const [row] = await db!.update(table).set(req.body).where(eq(table.id, id)).returning();
@@ -216,17 +241,18 @@ router.post("/doctors",       makeCreateRoute(doctorsTable));
 router.patch("/doctors/:id",  makePatchRoute(doctorsTable));
 
 router.get("/screenings",       makeListRoute(screeningsTable));
-router.post("/screenings",      makeCreateRoute(screeningsTable, () => ({ capturedAt: new Date() })));
-router.patch("/screenings/:id", makePatchRoute(screeningsTable));
+router.post("/screenings",      makeCreateRoute(screeningsTable, () => ({ capturedAt: new Date() }), SCREENING_STATUSES));
+router.patch("/screenings/:id", makePatchRoute(screeningsTable, SCREENING_STATUSES));
 
 router.get("/consultations",       makeListRoute(consultationsTable));
-router.post("/consultations",      makeCreateRoute(consultationsTable, () => ({ requestedAt: new Date() })));
+router.post("/consultations",      makeCreateRoute(consultationsTable, () => ({ requestedAt: new Date() }), CONSULTATION_STATUSES));
 
 // Smart PATCH for consultations — fires a push notification to the patient
 // when a specialist adds a response or moves status to Reviewed/Completed.
 router.patch("/consultations/:id", async (req: Request, res: Response) => {
   if (!req.auth) { res.status(401).end(); return; }
   if (!requireDb(res)) return;
+  if (!validateStatus(req, res, CONSULTATION_STATUSES)) return;
   const id = String(req.params["id"] ?? "");
   try {
     const [row] = await db!.update(consultationsTable).set(req.body).where(eq(consultationsTable.id, id)).returning();
@@ -310,16 +336,16 @@ router.patch("/consultations/:id", async (req: Request, res: Response) => {
 });
 
 router.get("/referrals",       makeListRoute(referralsTable));
-router.post("/referrals",      makeCreateRoute(referralsTable, () => ({ createdAt: new Date() })));
-router.patch("/referrals/:id", makePatchRoute(referralsTable));
+router.post("/referrals",      makeCreateRoute(referralsTable, () => ({ createdAt: new Date() }), REFERRAL_STATUSES));
+router.patch("/referrals/:id", makePatchRoute(referralsTable, REFERRAL_STATUSES));
 
 router.get("/appointments",       makeListRoute(appointmentsTable));
-router.post("/appointments",      makeCreateRoute(appointmentsTable, () => ({ createdAt: new Date() })));
-router.patch("/appointments/:id", makePatchRoute(appointmentsTable));
+router.post("/appointments",      makeCreateRoute(appointmentsTable, () => ({ createdAt: new Date() }), APPOINTMENT_STATUSES));
+router.patch("/appointments/:id", makePatchRoute(appointmentsTable, APPOINTMENT_STATUSES));
 
 router.get("/campaigns",       makeListRoute(campaignsTable));
-router.post("/campaigns",      makeCreateRoute(campaignsTable, () => ({ createdAt: new Date(), screenedCount: 0, referredCount: 0 })));
-router.patch("/campaigns/:id", makePatchRoute(campaignsTable));
+router.post("/campaigns",      makeCreateRoute(campaignsTable, () => ({ createdAt: new Date(), screenedCount: 0, referredCount: 0 }), CAMPAIGN_STATUSES));
+router.patch("/campaigns/:id", makePatchRoute(campaignsTable, CAMPAIGN_STATUSES));
 
 router.get("/notifications",       makeListRoute(notificationsTable));
 router.post("/notifications",      makeCreateRoute(notificationsTable, () => ({ createdAt: new Date(), read: false })));
