@@ -57,7 +57,11 @@ function getDeviceId(req: Request): string {
   return (req.headers["x-device-id"] as string) ?? randomUUID();
 }
 
-function sanitizeUser(user: ReturnType<typeof findUserById>) {
+function paramStr(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
+}
+
+function sanitizeUser(user: ReturnType<typeof findUserById> | null) {
   if (!user) return null;
   const { passwordHash, mfaSecret, mfaPendingSecret, ...safe } = user;
   void passwordHash; void mfaSecret; void mfaPendingSecret;
@@ -153,6 +157,7 @@ router.post("/register", async (req: Request, res: Response) => {
     mfaPendingSecret: null,
     dppaConsentAt: now,
     dppaConsentIp: ip,
+    pushToken: null,
     createdAt: now,
     lastLoginAt: now,
   };
@@ -480,7 +485,7 @@ router.post("/refresh", async (req: Request, res: Response) => {
       ipAddress: ip,
       userAgent: ua,
       deviceId: session?.deviceId ?? null,
-      metadata: { reason: session?.revokedAt ? "revoked" : session?.expiresAt < new Date() ? "expired" : "not_found" },
+      metadata: { reason: session?.revokedAt ? "revoked" : session && session.expiresAt < new Date() ? "expired" : "not_found" },
       dppaCategory: "authentication",
     });
     res.status(401).json({ error: "Refresh token is invalid, revoked, or expired" });
@@ -715,7 +720,7 @@ router.get("/sessions", requireAuth, (req: Request, res: Response) => {
  * Revoke a specific session (sign out from a device).
  */
 router.delete("/sessions/:sessionId", requireAuth, (req: Request, res: Response) => {
-  const sessionId = req.params["sessionId"];
+  const sessionId = paramStr(req.params["sessionId"]);
   if (!sessionId) {
     res.status(400).json({ error: "Session ID required" });
     return;
@@ -825,6 +830,7 @@ router.post(
       mfaPendingSecret: null,
       dppaConsentAt: null,
       dppaConsentIp: null,
+      pushToken: null,
       createdAt: new Date(),
       lastLoginAt: null,
     };
@@ -855,7 +861,7 @@ router.patch(
   requireAuth,
   requireRole("users", "update"),
   (req: Request, res: Response) => {
-    const { userId } = req.params;
+    const userId = paramStr(req.params["userId"]);
     const { isActive } = req.body as { isActive: boolean };
 
     const user = findUserById(userId ?? "");
@@ -902,7 +908,7 @@ router.patch(
   requireAuth,
   requireRole("users", "update"),
   (req: Request, res: Response) => {
-    const { userId } = req.params;
+    const userId = paramStr(req.params["userId"]);
     const parse = updateUserProfileSchema.safeParse(req.body);
     if (!parse.success) {
       res.status(400).json({ error: parse.error.issues[0]?.message ?? "Invalid request" });
@@ -963,7 +969,7 @@ router.delete(
   requireAuth,
   requireRole("users", "delete"),
   (req: Request, res: Response) => {
-    const { userId } = req.params;
+    const userId = paramStr(req.params["userId"]);
 
     if (userId === req.auth!.sub) {
       res.status(400).json({ error: "You cannot remove your own account." });

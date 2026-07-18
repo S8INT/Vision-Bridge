@@ -112,6 +112,7 @@ function rowToUser(r: typeof usersTable.$inferSelect): StoredUser {
     mfaPendingSecret: r.mfaPendingSecret,
     dppaConsentAt: r.dppaConsentAt,
     dppaConsentIp: r.dppaConsentIp,
+    pushToken: r.pushToken,
     createdAt: r.createdAt,
     lastLoginAt: r.lastLoginAt,
   };
@@ -336,6 +337,7 @@ export function addUser(user: StoredUser): void {
       mfaPendingSecret: user.mfaPendingSecret,
       dppaConsentAt: user.dppaConsentAt,
       dppaConsentIp: user.dppaConsentIp,
+      pushToken: user.pushToken,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
     }));

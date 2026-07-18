@@ -248,8 +248,7 @@ router.get("/:imageId/dicom", async (req, res) => {
       res.status(404).json({ error: "Image not found and patientId not provided" });
       return;
     }
-    const { buildDicomWrapper, formatDicomJson } = await import("../lib/imageProcessor.js");
-    // Can't import non-exported fn - just return a mock
+    // buildDicomWrapper is internal to imageProcessor — just return a mock
     res.json({
       _type: "DICOM-JSON",
       _compliance: "IHE Eye Care Technical Framework",

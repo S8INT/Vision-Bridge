@@ -75,7 +75,7 @@ function makeCreateRoute(table: any, prefill?: (req: Request) => Record<string, 
     if (!requireDb(res)) return;
     try {
       const values = { tenantId: req.auth.tenantId, ...(prefill ? prefill(req) : {}), ...req.body };
-      const [row] = await db!.insert(table).values(values).returning();
+      const [row] = (await db!.insert(table).values(values).returning()) as Record<string, unknown>[];
       res.status(201).json({ item: row });
     } catch (e) { console.error(e); res.status(400).json({ error: "Failed to create", detail: String(e) }); }
   };
@@ -256,7 +256,7 @@ router.post("/consultations",      makeCreateRoute(consultationsTable, () => ({ 
 router.patch("/consultations/:id", async (req: Request, res: Response) => {
   if (!req.auth) { res.status(401).end(); return; }
   if (!requireDb(res)) return;
-  const { id } = req.params;
+  const id = String(req.params["id"] ?? "");
   try {
     const [row] = await db!.update(consultationsTable).set(req.body).where(eq(consultationsTable.id, id)).returning();
     if (!row) { res.status(404).json({ error: "Not found" }); return; }

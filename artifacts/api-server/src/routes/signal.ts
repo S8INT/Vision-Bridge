@@ -14,6 +14,19 @@ export function getSignalingServer(): WebSocketServer {
 }
 
 // ── Message types ────────────────────────────────────────────────────────────
+// Minimal WebRTC payload shapes (DOM lib types are unavailable in this Node build;
+// the server only relays these blobs between peers and never inspects them).
+type RTCSessionDescriptionInit = {
+  type: "offer" | "answer" | "pranswer" | "rollback";
+  sdp?: string;
+};
+type RTCIceCandidateInit = {
+  candidate?: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+  usernameFragment?: string | null;
+};
+
 type SignalMessage =
   | { type: "join";      roomId: string; peerId: string; userId: string; role: string }
   | { type: "offer";     roomId: string; to: string;     from: string;  sdp: RTCSessionDescriptionInit }

@@ -19,7 +19,6 @@ export async function seedClinicalDemoData(tenantId: string): Promise<void> {
   const existing = await db.execute(
     sql`select count(*)::int as n from doctors where tenant_id = ${tenantId}`,
   );
-  // @ts-expect-error drizzle node-pg returns rows on .rows
   const n = Number(existing.rows?.[0]?.n ?? 0);
   if (n > 0) {
     console.log("[clinicalSeed] demo tenant already has clinical data — skip");

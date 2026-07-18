@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, uuid, jsonb, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+import { z } from "zod/v4";
 import { tenantsTable, usersTable } from "./auth";
 
 export type PatientSex = "M" | "F" | "Other";

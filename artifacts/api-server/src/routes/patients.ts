@@ -111,8 +111,8 @@ router.post("/me", async (req: Request, res: Response) => {
       tenantId: req.auth.tenantId,
       event: "patient.profile.created",
       outcome: "success",
-      ipAddress: req.ip,
-      userAgent: req.headers["user-agent"] ?? null,
+      ipAddress: req.ip ?? "unknown",
+      userAgent: String(req.headers["user-agent"] ?? "unknown"),
       deviceId: null,
       metadata: { patientId: created.patientId },
       dppaCategory: "patient_self_registration",
@@ -161,8 +161,8 @@ router.put("/me", async (req: Request, res: Response) => {
       tenantId: req.auth.tenantId,
       event: "patient.profile.updated",
       outcome: "success",
-      ipAddress: req.ip,
-      userAgent: req.headers["user-agent"] ?? null,
+      ipAddress: req.ip ?? "unknown",
+      userAgent: String(req.headers["user-agent"] ?? "unknown"),
       deviceId: null,
       metadata: { patientId: updated.patientId, fields: Object.keys(parsed.data) },
       dppaCategory: "patient_self_update",
@@ -232,8 +232,8 @@ router.post("/", async (req: Request, res: Response) => {
       tenantId: req.auth.tenantId,
       event: "patient.record.created",
       outcome: "success",
-      ipAddress: req.ip,
-      userAgent: req.headers["user-agent"] ?? null,
+      ipAddress: req.ip ?? "unknown",
+      userAgent: String(req.headers["user-agent"] ?? "unknown"),
       deviceId: null,
       metadata: { patientId: row.patientId, registeredByName },
       dppaCategory: "clinician_patient_registration",
@@ -251,7 +251,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
   if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
   if (req.auth.role === "Patient") { res.status(403).json({ error: "Forbidden" }); return; }
   if (!dbAvailable()) { res.status(503).json({ error: "Database unavailable" }); return; }
-  const { id } = req.params;
+  const id = String(req.params["id"] ?? "");
   try {
     const updates = { ...req.body };
     if (updates.lastVisit) updates.lastVisit = new Date(updates.lastVisit);
