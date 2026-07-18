@@ -237,6 +237,10 @@ export function getDemoTenantId(): string {
   return DEMO_TENANT_ID;
 }
 
+export function isDbAvailable(): boolean {
+  return dbAvailable;
+}
+
 // Kick off init on module load (non-blocking)
 initAuthStore().catch((e) => console.error("[authStore] init error:", e));
 

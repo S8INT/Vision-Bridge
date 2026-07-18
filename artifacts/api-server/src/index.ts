@@ -2,6 +2,8 @@ import http from "http";
 import app from "./app";
 import { handleUpgrade } from "./routes/signal";
 import { logger } from "./lib/logger";
+import { initAuthStore, getDemoTenantId, isDbAvailable } from "./lib/authStore";
+import { seedClinicalDemoData } from "./lib/clinicalSeed";
 
 const rawPort = process.env["PORT"];
 
@@ -25,3 +27,11 @@ server.on("upgrade", (req, socket, head) => {
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
 });
+
+// Seed idempotent clinical demo data once auth store init resolves (DB mode only)
+initAuthStore()
+  .then(async () => {
+    if (!isDbAvailable()) return;
+    await seedClinicalDemoData(getDemoTenantId());
+  })
+  .catch((err) => logger.error({ err }, "clinical demo seed failed"));
