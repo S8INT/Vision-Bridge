@@ -14,6 +14,7 @@ import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import DemoModeBanner from "@/components/DemoModeBanner";
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -84,6 +85,7 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        <DemoModeBanner />
         <View style={s.card}>
           <Text style={s.cardTitle}>Welcome back</Text>
           <Text style={s.cardSubtitle}>Sign in to your VisionBridge account</Text>

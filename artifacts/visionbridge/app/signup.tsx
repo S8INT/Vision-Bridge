@@ -8,6 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import { Feather } from "@expo/vector-icons";
 import { useAuth, type UserRole } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import DemoModeBanner from "@/components/DemoModeBanner";
 
 type SignupRole = Exclude<UserRole, "Admin">;
 
@@ -300,6 +301,8 @@ export default function SignupScreen() {
           </TouchableOpacity>
           <Text style={s.headerTitle}>Create account</Text>
         </View>
+
+        <DemoModeBanner />
 
         <View style={s.progress}>
           <View style={[s.progressDot, s.progressDotActive]} />
