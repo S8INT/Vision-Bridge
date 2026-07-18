@@ -31,6 +31,11 @@ components:
       properties:
         status:
           type: string
+        database:
+          type: string
+          enum: [connected, mock]
+          description: Whether the server is DB-backed ("connected") or running in in-memory mock mode ("mock")
       required:
         - status
+        - database
 

@@ -5,7 +5,10 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { HealthStatusDatabase } from "./healthStatusDatabase";
 
 export interface HealthStatus {
   status: string;
+  /** Whether the server is DB-backed ("connected") or running in in-memory mock mode ("mock") */
+  database: HealthStatusDatabase;
 }

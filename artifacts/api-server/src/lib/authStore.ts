@@ -222,9 +222,30 @@ export async function initAuthStore(): Promise<void> {
       // eslint-disable-next-line no-console
       console.log(`[authStore] DB-backed mode — ${users.size} users, ${sessionsByToken.size} sessions, tenant=${DEMO_TENANT_ID}`);
     } catch (err) {
+      if (process.env["NODE_ENV"] === "production") {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[authStore] FATAL: database unavailable in production — refusing to start in mock mode.",
+          (err as Error)?.message,
+        );
+        throw new Error(
+          `Database unavailable in production: ${(err as Error)?.message ?? String(err)}. ` +
+            "Refusing to fall back to in-memory mock mode. Check DATABASE_URL and ensure migrations have run.",
+        );
+      }
       dbAvailable = false;
       // eslint-disable-next-line no-console
-      console.warn("[authStore] DB unavailable, falling back to MOCK MODE:", (err as Error)?.message);
+      console.warn(
+        "\n" +
+          "╔══════════════════════════════════════════════════════════════════════╗\n" +
+          "║  ⚠  MOCK MODE — DATABASE UNAVAILABLE                                  ║\n" +
+          "║  Auth data is stored IN MEMORY ONLY and will be LOST on restart.      ║\n" +
+          "║  Accounts created now will vanish; clinical endpoints may fail.       ║\n" +
+          "║  Fix: check DATABASE_URL and ensure tables exist (run migrations).    ║\n" +
+          "╚══════════════════════════════════════════════════════════════════════╝",
+      );
+      // eslint-disable-next-line no-console
+      console.warn("[authStore] DB error was:", (err as Error)?.message);
       await seedMockMode();
       // eslint-disable-next-line no-console
       console.log(`[authStore] MOCK MODE — ${users.size} demo users seeded in memory`);

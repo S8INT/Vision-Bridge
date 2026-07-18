@@ -34,4 +34,13 @@ initAuthStore()
     if (!isDbAvailable()) return;
     await seedClinicalDemoData(getDemoTenantId());
   })
-  .catch((err) => logger.error({ err }, "clinical demo seed failed"));
+  .catch((err) => {
+    if (process.env["NODE_ENV"] === "production") {
+      logger.fatal({ err }, "auth store initialization failed in production — shutting down");
+      server.close(() => process.exit(1));
+      // Force exit if close hangs
+      setTimeout(() => process.exit(1), 5000).unref();
+      return;
+    }
+    logger.error({ err }, "auth store init / clinical demo seed failed");
+  });

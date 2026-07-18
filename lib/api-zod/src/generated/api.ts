@@ -13,4 +13,9 @@ import * as zod from "zod";
  */
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
+  database: zod
+    .enum(["connected", "mock"])
+    .describe(
+      'Whether the server is DB-backed (\"connected\") or running in in-memory mock mode (\"mock\")',
+    ),
 });
