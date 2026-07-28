@@ -13,6 +13,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 import offlineQueue, { QueueItem } from "./offlineQueue";
 import { fetchWithTimeout, UPLOAD_TIMEOUT_MS } from "../lib/fetchWithTimeout";
+import { getAuthHeaders } from "../lib/authToken";
 
 const API_BASE = process.env["EXPO_PUBLIC_API_URL"] ?? `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api-server/api`;
 
@@ -450,6 +451,7 @@ export async function uploadRetinalImage(
   try {
     response = await fetchWithTimeout(`${API_BASE}/imaging/upload`, {
       method: "POST",
+      headers: { ...getAuthHeaders() },
       body: formData,
       timeoutMs: UPLOAD_TIMEOUT_MS,
     });
@@ -480,7 +482,9 @@ export async function uploadRetinalImage(
  */
 export async function getThumbnailUrl(imageId: string, tenantId: string): Promise<string | null> {
   try {
-    const response = await fetchWithTimeout(`${API_BASE}/imaging/${imageId}/thumbnail?tenantId=${encodeURIComponent(tenantId)}`);
+    const response = await fetchWithTimeout(`${API_BASE}/imaging/${imageId}/thumbnail?tenantId=${encodeURIComponent(tenantId)}`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!response.ok) return null;
     const contentType = response.headers.get("Content-Type") ?? "";
     if (contentType.startsWith("image/")) {
@@ -499,7 +503,9 @@ export async function getThumbnailUrl(imageId: string, tenantId: string): Promis
  */
 export async function getDicomExport(imageId: string): Promise<object | null> {
   try {
-    const response = await fetchWithTimeout(`${API_BASE}/imaging/${imageId}/dicom`);
+    const response = await fetchWithTimeout(`${API_BASE}/imaging/${imageId}/dicom`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!response.ok) return null;
     return response.json();
   } catch {
@@ -625,6 +631,7 @@ export async function retryQueueItem(
     try {
       response = await fetchWithTimeout(`${API_BASE}/imaging/upload`, {
         method: "POST",
+        headers: { ...getAuthHeaders() },
         body: formData,
         timeoutMs: UPLOAD_TIMEOUT_MS,
       });

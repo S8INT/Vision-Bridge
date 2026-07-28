@@ -13,8 +13,14 @@
 
 import { Router } from "express";
 import { z } from "zod";
+import { requireAuth } from "../middlewares/auth.js";
 
 const router = Router();
+
+// Analytics endpoints aggregate and export patient data (PHI). They require a
+// valid access token, and the tenant scope is always taken from the
+// authenticated token rather than client-supplied query/body parameters.
+router.use(requireAuth);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -79,18 +85,19 @@ router.post("/aggregate", async (req, res) => {
   if (!parse.success) {
     return res.status(400).json({ error: "Invalid aggregate payload", details: parse.error.issues });
   }
-  const data = parse.data;
-  if (!aggregateStore[data.tenantId]) aggregateStore[data.tenantId] = [];
-  aggregateStore[data.tenantId] = aggregateStore[data.tenantId]
+  const tenantId = req.auth!.tenantId;
+  const data = { ...parse.data, tenantId };
+  if (!aggregateStore[tenantId]) aggregateStore[tenantId] = [];
+  aggregateStore[tenantId] = aggregateStore[tenantId]
     .filter((a) => !(a.period === data.period && a.district === data.district));
-  aggregateStore[data.tenantId].push(data);
+  aggregateStore[tenantId].push(data);
   return res.json({ ok: true, stored: true });
 });
 
 // ── GET /overview ─────────────────────────────────────────────────────────────
 
 router.get("/overview", (req, res) => {
-  const tenantId = (req.query["tenantId"] as string) ?? "demo";
+  const tenantId = req.auth!.tenantId;
   const store = aggregateStore[tenantId] ?? [];
   const totals = store.reduce(
     (acc, a) => ({
@@ -183,7 +190,7 @@ router.post("/dhis2/push", async (req, res) => {
 // ── GET /registry — Responsibility 3: National registry aggregation ────────────
 
 router.get("/registry", (req, res) => {
-  const tenantId = (req.query["tenantId"] as string) ?? "demo";
+  const tenantId = req.auth!.tenantId;
   const store = aggregateStore[tenantId] ?? [];
 
   const registryEntry = {
@@ -234,7 +241,7 @@ const AiPerfSchema = z.object({
 router.post("/ai-performance", (req, res) => {
   const parse = AiPerfSchema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: "Invalid payload", details: parse.error.issues });
-  const d = parse.data;
+  const d = { ...parse.data, tenantId: req.auth!.tenantId };
   const snap: AiSnapshot = { ...d, recordedAt: new Date().toISOString() };
   aiSnapshots.push(snap);
 
@@ -254,7 +261,7 @@ router.post("/ai-performance", (req, res) => {
 });
 
 router.get("/ai-performance", (req, res) => {
-  const tenantId = (req.query["tenantId"] as string) ?? "demo";
+  const tenantId = req.auth!.tenantId;
   const snaps = aiSnapshots.filter((s) => s.tenantId === tenantId);
   if (!snaps.length) return res.json({ snaps: [], status: "no_data", alerts: [] });
   const last = snaps[snaps.length - 1];
@@ -270,7 +277,7 @@ router.get("/ai-performance", (req, res) => {
 // ── GET /risk-map — Responsibility 5: Population risk stratification ───────────
 
 router.get("/risk-map", (req, res) => {
-  const tenantId = (req.query["tenantId"] as string) ?? "demo";
+  const tenantId = req.auth!.tenantId;
   const store = aggregateStore[tenantId] ?? [];
 
   const districtMap: Record<string, { district: string; total: number; byRisk: Record<string, number>; highRiskRate: number }> = {};
@@ -298,7 +305,7 @@ router.get("/risk-map", (req, res) => {
 // ── GET /campaigns — Responsibility 6: Campaign effectiveness ─────────────────
 
 router.get("/campaigns", (req, res) => {
-  const tenantId = (req.query["tenantId"] as string) ?? "demo";
+  const tenantId = req.auth!.tenantId;
   const store = aggregateStore[tenantId] ?? [];
   const campaignMap: Record<string, { id: string; name: string; targetCount: number; screenedCount: number; referredCount: number; coverage: number; referralRate: number; periods: string[] }> = {};
   for (const a of store) {

@@ -14,6 +14,7 @@
 import { Platform, Share } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
+import { getAuthHeaders } from "../lib/authToken";
 import type {
   Patient, Screening, Consultation, Referral, Campaign,
   RiskLevel,
@@ -414,7 +415,7 @@ export async function pushToDHIS2(
   try {
     const resp = await fetchWithTimeout(`${API_BASE}/analytics/dhis2/push`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({
         tenantId,
         period,
@@ -465,7 +466,7 @@ export async function pushAggregate(
   try {
     await fetchWithTimeout(`${API_BASE}/analytics/aggregate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(payload),
     });
     return true;

@@ -19,7 +19,31 @@ export interface TokenPayload {
   fullName: string;
 }
 
-const JWT_SECRET = process.env["JWT_SECRET"] ?? "visionbridge-dev-secret-change-in-production";
+const DEFAULT_DEV_SECRET = "visionbridge-dev-secret-change-in-production";
+
+/**
+ * Resolve the signing secret. In production a strong, non-default JWT_SECRET
+ * MUST be provided — otherwise anyone could forge valid access tokens. We fail
+ * closed (throw on startup) rather than silently falling back to a public
+ * default. In non-production the dev default is allowed for convenience.
+ */
+function resolveJwtSecret(): string {
+  const secret = process.env["JWT_SECRET"];
+  const isProduction = process.env["NODE_ENV"] === "production";
+
+  if (!secret || secret === DEFAULT_DEV_SECRET) {
+    if (isProduction) {
+      throw new Error(
+        "JWT_SECRET must be set to a strong, non-default value in production. " +
+          "Refusing to start with a missing or default signing secret.",
+      );
+    }
+    return DEFAULT_DEV_SECRET;
+  }
+  return secret;
+}
+
+const JWT_SECRET = resolveJwtSecret();
 const JWT_ISSUER = "visionbridge-ug";
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_TOKEN_BYTES = 48;

@@ -12,6 +12,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
+import { setAuthToken } from "../lib/authToken";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -221,7 +222,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Workaround to read current accessToken in closure
   const accessTokenRef = useRef<string | null>(null);
-  useEffect(() => { accessTokenRef.current = state.accessToken; }, [state.accessToken]);
+  useEffect(() => {
+    accessTokenRef.current = state.accessToken;
+    // Mirror the token to the registry used by non-React service modules
+    // (imagingService, analyticsService) so their requests are authenticated.
+    setAuthToken(state.accessToken);
+  }, [state.accessToken]);
   async function getStoredAccessToken() { return accessTokenRef.current; }
 
   // ── Login ──────────────────────────────────────────────────────────────────

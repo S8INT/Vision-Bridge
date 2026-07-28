@@ -253,9 +253,11 @@ router.patch("/:id", async (req: Request, res: Response) => {
   if (!dbAvailable()) { res.status(503).json({ error: "Database unavailable" }); return; }
   const id = String(req.params["id"] ?? "");
   try {
-    const updates = { ...req.body };
+    // Never allow the client to move a record between tenants/users.
+    const { tenantId: _t, userId: _u, id: _id, ...updates } = { ...req.body } as Record<string, any>;
     if (updates.lastVisit) updates.lastVisit = new Date(updates.lastVisit);
-    const [row] = await db!.update(patientsTable).set(updates).where(eq(patientsTable.id, id)).returning();
+    const [row] = await db!.update(patientsTable).set(updates)
+      .where(and(eq(patientsTable.id, id), eq(patientsTable.tenantId, req.auth.tenantId))).returning();
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
     res.json({ item: row });
   } catch (err) {

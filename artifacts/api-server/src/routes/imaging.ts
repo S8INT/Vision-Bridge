@@ -3,8 +3,14 @@ import multer from "multer";
 import { processRetinalImage, formatDicomJson, type ImageMetadata } from "../lib/imageProcessor.js";
 import { getMinioClient, getBucketName, uploadToMinio, getPresignedUrl, deleteFromMinio } from "../lib/minio.js";
 import { logger } from "../lib/logger.js";
+import { requireAuth } from "../middlewares/auth.js";
 
 const router = Router();
+
+// All imaging routes handle patient PHI (retinal images) and require a valid
+// access token. The tenant is derived from the authenticated token below —
+// never from client-supplied input — to prevent cross-tenant access.
+router.use(requireAuth);
 
 // In-memory store for dev/fallback (when MinIO not configured)
 const localImageStore = new Map<string, {
@@ -62,10 +68,11 @@ router.post("/upload", upload.single("image"), async (req, res) => {
       return;
     }
 
-    const { patientId, deviceId, tenantId, eye, operatorId, campaignId, captureTime } = req.body as Record<string, string>;
+    const { patientId, deviceId, eye, operatorId, campaignId, captureTime } = req.body as Record<string, string>;
+    const tenantId = req.auth!.tenantId;
 
-    if (!patientId || !deviceId || !tenantId) {
-      res.status(400).json({ error: "patientId, deviceId, and tenantId are required" });
+    if (!patientId || !deviceId) {
+      res.status(400).json({ error: "patientId and deviceId are required" });
       return;
     }
 
@@ -165,7 +172,7 @@ router.post("/upload", upload.single("image"), async (req, res) => {
  */
 router.get("/:imageId", async (req, res) => {
   const { imageId } = req.params;
-  const tenantId = req.query["tenantId"] as string;
+  const tenantId = req.auth!.tenantId;
 
   const client = getMinioClient();
 
@@ -205,7 +212,7 @@ router.get("/:imageId", async (req, res) => {
  */
 router.get("/:imageId/thumbnail", async (req, res) => {
   const { imageId } = req.params;
-  const tenantId = req.query["tenantId"] as string;
+  const tenantId = req.auth!.tenantId;
 
   const client = getMinioClient();
 
@@ -274,7 +281,7 @@ router.get("/:imageId/dicom", async (req, res) => {
  */
 router.delete("/:imageId", async (req, res) => {
   const { imageId } = req.params;
-  const tenantId = req.query["tenantId"] as string;
+  const tenantId = req.auth!.tenantId;
 
   const client = getMinioClient();
 
@@ -301,7 +308,7 @@ router.delete("/:imageId", async (req, res) => {
  * Returns offline upload queue status for a tenant
  */
 router.get("/queue/:tenantId", (req, res) => {
-  const { tenantId } = req.params;
+  const tenantId = req.auth!.tenantId;
   const queue = offlineQueue.get(tenantId) ?? [];
   res.json({
     tenantId,
@@ -318,7 +325,7 @@ router.get("/queue/:tenantId", (req, res) => {
  * Add an item to the offline upload queue
  */
 router.post("/queue/:tenantId", (req, res) => {
-  const { tenantId } = req.params;
+  const tenantId = req.auth!.tenantId;
   const { patientId } = req.body as { patientId: string };
   if (!patientId) {
     res.status(400).json({ error: "patientId required" });

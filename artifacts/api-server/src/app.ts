@@ -25,7 +25,23 @@ app.use(
     },
   }),
 );
-app.use(cors());
+// CORS: restrict to an explicit allowlist (comma-separated origins) via
+// CORS_ALLOWED_ORIGINS. When no allowlist is configured we reflect all origins
+// in non-production for convenience, but deny cross-origin requests in
+// production so PHI endpoints are not exposed to arbitrary web origins.
+const allowedOrigins = (process.env["CORS_ALLOWED_ORIGINS"] ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const corsOrigin =
+  allowedOrigins.length > 0
+    ? allowedOrigins
+    : process.env["NODE_ENV"] === "production"
+      ? false
+      : true;
+
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

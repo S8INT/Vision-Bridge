@@ -74,7 +74,10 @@ function makeCreateRoute(table: any, prefill?: (req: Request) => Record<string, 
     if (!req.auth) { res.status(401).end(); return; }
     if (!requireDb(res)) return;
     try {
-      const values = { tenantId: req.auth.tenantId, ...(prefill ? prefill(req) : {}), ...req.body };
+      // Strip client-supplied tenantId so a caller cannot create records in
+      // another tenant; tenant is always taken from the authenticated token.
+      const { tenantId: _ignoredTenant, ...body } = (req.body ?? {}) as Record<string, unknown>;
+      const values = { ...(prefill ? prefill(req) : {}), ...body, tenantId: req.auth.tenantId };
       const [row] = (await db!.insert(table).values(values).returning()) as Record<string, unknown>[];
       res.status(201).json({ item: row });
     } catch (e) { console.error(e); res.status(400).json({ error: "Failed to create", detail: String(e) }); }
@@ -87,7 +90,9 @@ function makePatchRoute(table: any) {
     if (!requireDb(res)) return;
     const { id } = req.params;
     try {
-      const [row] = await db!.update(table).set(req.body).where(eq(table.id, id)).returning();
+      const { tenantId: _ignoredTenant, ...body } = (req.body ?? {}) as Record<string, unknown>;
+      const [row] = await db!.update(table).set(body)
+        .where(and(eq(table.id, id), eq(table.tenantId, req.auth.tenantId))).returning();
       if (!row) { res.status(404).json({ error: "Not found" }); return; }
       res.json({ item: row });
     } catch (e) { console.error(e); res.status(400).json({ error: "Failed to update", detail: String(e) }); }
@@ -258,7 +263,9 @@ router.patch("/consultations/:id", async (req: Request, res: Response) => {
   if (!requireDb(res)) return;
   const id = String(req.params["id"] ?? "");
   try {
-    const [row] = await db!.update(consultationsTable).set(req.body).where(eq(consultationsTable.id, id)).returning();
+    const { tenantId: _ignoredTenant, ...body } = (req.body ?? {}) as Record<string, unknown>;
+    const [row] = await db!.update(consultationsTable).set(body)
+      .where(and(eq(consultationsTable.id, id), eq(consultationsTable.tenantId, req.auth.tenantId))).returning();
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
     res.json({ item: row });
 
