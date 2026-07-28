@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
   FlatList,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -9,8 +8,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp } from "@/context/AppContext";
 import { Patient } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
@@ -19,7 +18,6 @@ import { PatientCard } from "@/components/PatientCard";
 
 export default function PatientsScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { patients, screenings } = useApp();
   const { user } = useAuth();
   const canScreen = user?.role === "Technician" || user?.role === "CHW" || user?.role === "Doctor" || user?.role === "Admin";
@@ -56,8 +54,7 @@ export default function PatientsScreen() {
     return list;
   }, [patients, screenings, query, filter]);
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   function getLastScreening(patientId: string) {
     const sorted = screenings

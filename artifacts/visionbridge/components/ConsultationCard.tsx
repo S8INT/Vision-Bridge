@@ -4,6 +4,8 @@ import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { Consultation, Patient, CareCoordinationStatus } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
+import { fmtShortDate } from "@/utils/date";
+import { getCareStatusColor, getCareStatusVariant, getPriorityBarColor, getPriorityVariant } from "@/utils/status";
 
 interface ConsultationCardProps {
   consultation: Consultation;
@@ -11,54 +13,9 @@ interface ConsultationCardProps {
   onPress: () => void;
 }
 
-function getPriorityVariant(priority: string) {
-  if (priority === "Emergency") return "urgent";
-  if (priority === "Urgent") return "warning";
-  return "muted";
-}
-
-function getPriorityBarColor(priority: string, colors: ReturnType<typeof useColors>) {
-  if (priority === "Emergency") return colors.destructive;
-  if (priority === "Urgent") return colors.warning;
-  return colors.border;
-}
-
-function getStatusColor(status: CareCoordinationStatus, colors: ReturnType<typeof useColors>) {
-  switch (status) {
-    case "Completed": return colors.success;
-    case "Reviewed": return colors.success;
-    case "Referred": return colors.primary;
-    case "InReview": return colors.warning;
-    case "Assigned": return colors.accent;
-    case "Cancelled": return colors.mutedForeground;
-    default: return colors.mutedForeground;
-  }
-}
-
-function getStatusVariant(status: CareCoordinationStatus) {
-  switch (status) {
-    case "Completed":
-    case "Reviewed":
-      return "success";
-    case "InReview":
-      return "warning";
-    case "Assigned":
-    case "Referred":
-      return "referral";
-    case "Cancelled":
-      return "muted";
-    default:
-      return "muted";
-  }
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-UG", { month: "short", day: "numeric" });
-}
-
 export function ConsultationCard({ consultation, patient, onPress }: ConsultationCardProps) {
   const colors = useColors();
-  const statusColor = getStatusColor(consultation.status, colors);
+  const statusColor = getCareStatusColor(consultation.status, colors);
 
   return (
     <TouchableOpacity
@@ -123,9 +80,9 @@ export function ConsultationCard({ consultation, patient, onPress }: Consultatio
 
         <View style={styles.bottomRow}>
           <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-          <Badge label={consultation.status} variant={getStatusVariant(consultation.status)} size="sm" />
+          <Badge label={consultation.status} variant={getCareStatusVariant(consultation.status)} size="sm" />
           <Text style={[styles.date, { color: colors.mutedForeground }]}>
-            {formatDate(consultation.requestedAt)}
+            {fmtShortDate(consultation.requestedAt)}
           </Text>
         </View>
       </View>

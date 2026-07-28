@@ -4,6 +4,8 @@ import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { Screening } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
+import { fmtShortDateTime } from "@/utils/date";
+import { getScreeningStatusVariant } from "@/utils/status";
 
 interface ScreeningCardProps {
   screening: Screening;
@@ -16,22 +18,6 @@ function getRiskVariant(risk: string) {
   if (risk === "Moderate") return "warning";
   if (risk === "Mild") return "referral";
   return "success";
-}
-
-function getStatusVariant(status: string) {
-  if (status === "Referred") return "urgent";
-  if (status === "Reviewed") return "success";
-  if (status === "Screened") return "referral";
-  return "muted";
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-UG", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 export function ScreeningCard({ screening, patientName, onPress }: ScreeningCardProps) {
@@ -52,7 +38,7 @@ export function ScreeningCard({ screening, patientName, onPress }: ScreeningCard
         ) : null}
         <View style={styles.badgeRow}>
           <Badge label={screening.aiRiskLevel} variant={getRiskVariant(screening.aiRiskLevel)} size="sm" />
-          <Badge label={screening.status} variant={getStatusVariant(screening.status)} size="sm" />
+          <Badge label={screening.status} variant={getScreeningStatusVariant(screening.status)} size="sm" />
           <Text style={[styles.confidence, { color: colors.mutedForeground }]}>
             {screening.aiConfidence}% conf.
           </Text>
@@ -61,7 +47,7 @@ export function ScreeningCard({ screening, patientName, onPress }: ScreeningCard
           {screening.aiFindings.join(" · ")}
         </Text>
         <View style={styles.bottomRow}>
-          <Text style={[styles.date, { color: colors.mutedForeground }]}>{formatDate(screening.capturedAt)}</Text>
+          <Text style={[styles.date, { color: colors.mutedForeground }]}>{fmtShortDateTime(screening.capturedAt)}</Text>
           <View style={styles.qualityRow}>
             <Feather name="aperture" size={11} color={colors.mutedForeground} />
             <Text style={[styles.quality, { color: colors.mutedForeground }]}>{screening.imageQualityScore}%</Text>

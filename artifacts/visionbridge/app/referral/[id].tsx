@@ -1,7 +1,6 @@
 import React from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,15 +9,14 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, ReferralStatus } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
-
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString("en-UG", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
+import { fmtDateTime } from "@/utils/date";
+import { InfoRow } from "@/components/ui/InfoRow";
+import { Avatar } from "@/components/ui/Avatar";
 
 function getStatusBadgeVariant(status: ReferralStatus) {
   if (status === "Completed") return "success";
@@ -28,29 +26,17 @@ function getStatusBadgeVariant(status: ReferralStatus) {
   return "muted";
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  const colors = useColors();
-  return (
-    <View style={styles.infoRow}>
-      <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>{label}</Text>
-      <Text style={[styles.infoValue, { color: colors.foreground }]} numberOfLines={3}>{value}</Text>
-    </View>
-  );
-}
-
 const REFERRAL_TIMELINE: ReferralStatus[] = ["Pending", "Accepted", "InTransit", "Arrived", "Completed"];
 
 export default function ReferralDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { referrals, getPatient, updateReferral, addNotification } = useApp();
 
   const referral = referrals.find((r) => r.id === id);
   const patient = referral ? getPatient(referral.patientId) : undefined;
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   if (!referral) {
     return (
@@ -125,9 +111,7 @@ export default function ReferralDetailScreen() {
         <TouchableOpacity onPress={() => router.push(`/patient/${patient.id}`)} activeOpacity={0.8}
           style={[styles.patientCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         >
-          <View style={[styles.av, { backgroundColor: colors.primary + "18" }]}>
-            <Text style={[styles.avText, { color: colors.primary }]}>{patient.firstName[0]}{patient.lastName[0]}</Text>
-          </View>
+          <Avatar firstName={patient.firstName} lastName={patient.lastName} size={44} fontSize={16} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.patientName, { color: colors.foreground }]}>{patient.firstName} {patient.lastName}</Text>
             <Text style={[styles.patientMeta, { color: colors.mutedForeground }]}>{patient.patientId} · {patient.village}</Text>
@@ -138,20 +122,20 @@ export default function ReferralDetailScreen() {
 
       <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>REFERRAL DETAILS</Text>
-        <InfoRow label="Reason" value={referral.reason} />
-        <InfoRow label="Clinical Summary" value={referral.clinicalSummary} />
-        <InfoRow label="Created" value={fmtDateTime(referral.createdAt)} />
-        {referral.transportArranged ? <InfoRow label="Transport" value="Arranged" /> : null}
-        {referral.escortRequired ? <InfoRow label="Escort" value="Required" /> : null}
-        {referral.referralNotes ? <InfoRow label="Notes" value={referral.referralNotes} /> : null}
+        <InfoRow labelFlex={0.35} label="Reason" value={referral.reason} />
+        <InfoRow labelFlex={0.35} label="Clinical Summary" value={referral.clinicalSummary} />
+        <InfoRow labelFlex={0.35} label="Created" value={fmtDateTime(referral.createdAt)} />
+        {referral.transportArranged ? <InfoRow labelFlex={0.35} label="Transport" value="Arranged" /> : null}
+        {referral.escortRequired ? <InfoRow labelFlex={0.35} label="Escort" value="Required" /> : null}
+        {referral.referralNotes ? <InfoRow labelFlex={0.35} label="Notes" value={referral.referralNotes} /> : null}
       </View>
 
       {referral.acceptedAt || referral.arrivedAt || referral.completedAt ? (
         <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>TRACKING</Text>
-          {referral.acceptedAt ? <InfoRow label="Accepted" value={fmtDateTime(referral.acceptedAt)} /> : null}
-          {referral.arrivedAt ? <InfoRow label="Arrived" value={fmtDateTime(referral.arrivedAt)} /> : null}
-          {referral.completedAt ? <InfoRow label="Completed" value={fmtDateTime(referral.completedAt)} /> : null}
+          {referral.acceptedAt ? <InfoRow labelFlex={0.35} label="Accepted" value={fmtDateTime(referral.acceptedAt)} /> : null}
+          {referral.arrivedAt ? <InfoRow labelFlex={0.35} label="Arrived" value={fmtDateTime(referral.arrivedAt)} /> : null}
+          {referral.completedAt ? <InfoRow labelFlex={0.35} label="Completed" value={fmtDateTime(referral.completedAt)} /> : null}
         </View>
       ) : null}
 
@@ -216,15 +200,10 @@ const styles = StyleSheet.create({
   destDistrict: { fontSize: 13 },
   destDoctor: { fontSize: 13, fontStyle: "italic" },
   patientCard: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 12, padding: 14 },
-  av: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  avText: { fontSize: 16, fontWeight: "700" },
   patientName: { fontSize: 15, fontWeight: "600" },
   patientMeta: { fontSize: 12 },
   section: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 10 },
   sectionLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 1 },
-  infoRow: { flexDirection: "row", justifyContent: "space-between", gap: 12, alignItems: "flex-start" },
-  infoLabel: { fontSize: 13, flex: 0.35 },
-  infoValue: { fontSize: 13, fontWeight: "500", flex: 0.65, textAlign: "right" },
   bodyText: { fontSize: 14, lineHeight: 20 },
   timelineRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, minHeight: 32 },
   timelineLeft: { alignItems: "center", width: 20 },

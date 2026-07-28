@@ -1,7 +1,6 @@
 import React from "react";
 import {
   FlatList,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -9,8 +8,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, Notification } from "@/context/AppContext";
 import * as Haptics from "expo-haptics";
 
@@ -57,7 +56,6 @@ function formatRelativeTime(iso: string) {
 
 export default function NotificationsScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { notifications, markNotificationRead, markAllNotificationsRead } = useApp();
 
   const sorted = [...notifications].sort(
@@ -65,8 +63,7 @@ export default function NotificationsScreen() {
   );
   const unread = notifications.filter((n) => !n.read).length;
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   function handleNotificationPress(n: Notification) {
     markNotificationRead(n.id);

@@ -15,17 +15,8 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useApp, Patient, RiskLevel } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
-
-function getRiskVariant(r: RiskLevel) {
-  if (r === "Urgent" || r === "Severe") return "urgent";
-  if (r === "Moderate") return "warning";
-  if (r === "Mild") return "mild";
-  return "success";
-}
-
-function progressPercent(screened: number, target: number) {
-  return target > 0 ? Math.min(100, Math.round((screened / target) * 100)) : 0;
-}
+import { progressPercent } from "@/utils/campaign";
+import { getRiskVariant } from "@/utils/risk";
 
 export default function CampaignSessionScreen() {
   const { id: campaignId } = useLocalSearchParams<{ id: string }>();

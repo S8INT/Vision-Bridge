@@ -1,7 +1,6 @@
 import React from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,43 +9,25 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, AppointmentStatus } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
-
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString("en-UG", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-function getStatusVariant(status: AppointmentStatus) {
-  if (status === "Confirmed" || status === "Completed") return "success";
-  if (status === "Cancelled" || status === "NoShow") return "urgent";
-  return "muted";
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  const colors = useColors();
-  return (
-    <View style={styles.infoRow}>
-      <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>{label}</Text>
-      <Text style={[styles.infoValue, { color: colors.foreground }]} numberOfLines={3}>{value}</Text>
-    </View>
-  );
-}
+import { fmtDateTime } from "@/utils/date";
+import { InfoRow } from "@/components/ui/InfoRow";
+import { getAppointmentStatusVariant } from "@/utils/status";
+import { Avatar } from "@/components/ui/Avatar";
 
 export default function AppointmentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { appointments, getPatient, updateAppointment, addNotification } = useApp();
 
   const appointment = appointments.find((a) => a.id === id);
   const patient = appointment ? getPatient(appointment.patientId) : undefined;
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   if (!appointment) {
     return (
@@ -101,7 +82,7 @@ export default function AppointmentDetailScreen() {
             <Text style={[styles.apptId, { color: colors.mutedForeground }]}>APPOINTMENT #{appointment.id.slice(-6).toUpperCase()}</Text>
             <Text style={[styles.apptType, { color: colors.foreground }]}>{appointment.type}</Text>
           </View>
-          <Badge label={appointment.status} variant={getStatusVariant(appointment.status)} />
+          <Badge label={appointment.status} variant={getAppointmentStatusVariant(appointment.status)} />
         </View>
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
         <View style={styles.dateRow}>
@@ -116,9 +97,7 @@ export default function AppointmentDetailScreen() {
           activeOpacity={0.8}
           style={[styles.patientCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         >
-          <View style={[styles.av, { backgroundColor: colors.primary + "18" }]}>
-            <Text style={[styles.avText, { color: colors.primary }]}>{patient.firstName[0]}{patient.lastName[0]}</Text>
-          </View>
+          <Avatar firstName={patient.firstName} lastName={patient.lastName} size={44} fontSize={16} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.patientName, { color: colors.foreground }]}>{patient.firstName} {patient.lastName}</Text>
             <Text style={[styles.patientMeta, { color: colors.mutedForeground }]}>{patient.patientId} · {patient.village}</Text>
@@ -189,15 +168,10 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   dateText: { fontSize: 16, fontWeight: "600" },
   patientCard: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 12, padding: 14 },
-  av: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  avText: { fontSize: 16, fontWeight: "700" },
   patientName: { fontSize: 15, fontWeight: "600" },
   patientMeta: { fontSize: 12 },
   section: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 10 },
   sectionLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 1 },
-  infoRow: { flexDirection: "row", justifyContent: "space-between", gap: 12, alignItems: "flex-start" },
-  infoLabel: { fontSize: 13, flex: 0.4 },
-  infoValue: { fontSize: 13, fontWeight: "500", flex: 0.6, textAlign: "right" },
   actionBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16, borderRadius: 14 },
   actionBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   cancelBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5 },

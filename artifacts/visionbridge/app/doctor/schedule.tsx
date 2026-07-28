@@ -24,6 +24,7 @@ import {
   DEFAULT_SCHEDULE,
 } from "@/hooks/useProfile";
 import { useApp } from "@/context/AppContext";
+import { fmtDayNumber, fmtMonth } from "@/utils/date";
 
 const DAYS: { key: WeekDay; label: string }[] = [
   { key: "Mon", label: "Monday" },
@@ -246,8 +247,8 @@ export default function DoctorScheduleScreen() {
           myUpcoming.map((a) => (
             <View key={a.id} style={styles.apptRow}>
               <View style={styles.apptDate}>
-                <Text style={styles.apptDay}>{new Date(a.scheduledDate).toLocaleDateString("en-UG", { day: "numeric" })}</Text>
-                <Text style={styles.apptMonth}>{new Date(a.scheduledDate).toLocaleDateString("en-UG", { month: "short" })}</Text>
+                <Text style={styles.apptDay}>{fmtDayNumber(a.scheduledDate)}</Text>
+                <Text style={styles.apptMonth}>{fmtMonth(a.scheduledDate)}</Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.apptTitle}>{a.type} · {a.scheduledTime}</Text>

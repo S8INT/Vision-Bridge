@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
   FlatList,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -9,8 +8,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, CareCoordinationStatus } from "@/context/AppContext";
 import { ConsultationCard } from "@/components/ConsultationCard";
 
@@ -18,7 +17,6 @@ type FilterTab = "All" | "Pending" | "Assigned" | "InReview" | "Reviewed" | "Ref
 
 export default function ConsultationsScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { consultations, patients } = useApp();
   const [activeTab, setActiveTab] = useState<FilterTab>("All");
 
@@ -42,8 +40,7 @@ export default function ConsultationsScreen() {
 
   const tabs: FilterTab[] = ["All", "Pending", "Assigned", "InReview", "Reviewed", "Referred", "Completed"];
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   const urgentCount = consultations.filter((c) => c.priority === "Emergency" && c.status !== "Completed" && c.status !== "Cancelled").length;
 

@@ -16,7 +16,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -24,9 +23,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp } from "@/context/AppContext";
 import {
   computePrevalence,
@@ -48,6 +47,7 @@ import {
   type CampaignEffectiveness,
   type AiPerformanceReport,
 } from "@/services/analyticsService";
+import { fmtMonthYear } from "@/utils/date";
 
 type TabKey = "overview" | "stratification" | "campaigns" | "ai" | "export";
 
@@ -195,7 +195,6 @@ const kpiStyles = StyleSheet.create({
 
 export default function AnalyticsScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { patients, screenings, consultations, referrals, campaigns, currentUser } = useApp();
 
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
@@ -205,8 +204,7 @@ export default function AnalyticsScreen() {
   const [exporting, setExporting] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   // ── Memoised computations ──────────────────────────────────────────────────
 
@@ -339,7 +337,7 @@ export default function AnalyticsScreen() {
           <>
             {/* KPIs */}
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <SectionHeader title="Key Performance Indicators" subtitle={`${new Date().toLocaleDateString("en-UG", { month: "long", year: "numeric" })}`} icon="bar-chart-2" colors={colors} />
+              <SectionHeader title="Key Performance Indicators" subtitle={fmtMonthYear()} icon="bar-chart-2" colors={colors} />
               <View style={styles.kpiGrid}>
                 <KpiCard label="Total Patients" value={kpis.totalPatients} icon="users" color={colors.primary} colors={colors} />
                 <KpiCard label="Total Screened" value={kpis.totalScreenings} icon="camera" color={colors.success} colors={colors} />

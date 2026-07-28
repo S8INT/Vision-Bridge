@@ -30,9 +30,9 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, RiskLevel } from "@/context/AppContext";
 import {
   checkImageQualityLocally,
@@ -44,6 +44,8 @@ import offlineQueue from "@/services/offlineQueue";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { Badge } from "@/components/ui/Badge";
 import ImageQualityChecker from "@/components/ImageQualityChecker";
+import { Avatar } from "@/components/ui/Avatar";
+import { getRiskColor } from "@/utils/risk";
 
 const API_BASE = `${process.env["EXPO_PUBLIC_API_URL"] ?? ""}/api`;
 
@@ -60,13 +62,6 @@ const AI_FINDINGS_BY_RISK: Record<RiskLevel, string[]> = {
 
 const DEVICE_ID = `VBDevice_${Platform.OS}_${Platform.Version ?? "web"}`;
 const TENANT_ID = "mbarara-rrh-01";
-
-function getRiskColor(risk: RiskLevel, colors: ReturnType<typeof useColors>) {
-  if (risk === "Urgent" || risk === "Severe") return colors.destructive;
-  if (risk === "Moderate") return colors.warning;
-  if (risk === "Mild") return colors.accent;
-  return colors.success;
-}
 
 function getRiskVariant(risk: RiskLevel) {
   if (risk === "Urgent" || risk === "Severe") return "urgent";
@@ -115,7 +110,6 @@ export default function NewScreeningScreen() {
   const { patientId: paramPatientId, campaignId, batch } = useLocalSearchParams<{ patientId?: string; campaignId?: string; batch?: string }>();
   const isBatch = batch === "1" && !!campaignId;
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { patients, addScreening, addConsultation, addNotification, currentUser, updateCampaign, campaigns } = useApp();
 
   const [selectedPatientId, setSelectedPatientId] = useState(paramPatientId ?? "");
@@ -137,8 +131,7 @@ export default function NewScreeningScreen() {
   const scanAnim = useRef(new Animated.Value(0)).current;
 
   const selectedPatient = patients.find((p) => p.id === selectedPatientId);
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   useEffect(() => {
     offlineQueue.getStats().then((s) => setQueueStats({ queued: s.queued, failed: s.failed }));
@@ -436,9 +429,7 @@ export default function NewScreeningScreen() {
                   borderColor: selectedPatientId === p.id ? colors.primary : colors.border,
                 }]}
               >
-                <View style={[styles.av, { backgroundColor: colors.primary + "18" }]}>
-                  <Text style={[styles.avText, { color: colors.primary }]}>{p.firstName[0]}{p.lastName[0]}</Text>
-                </View>
+                <Avatar firstName={p.firstName} lastName={p.lastName} size={36} fontSize={14} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.patientName, { color: colors.foreground }]}>{p.firstName} {p.lastName}</Text>
                   <Text style={[styles.patientMeta, { color: colors.mutedForeground }]}>{p.patientId} · {p.village}</Text>
@@ -737,8 +728,6 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 1 },
 
   patientOption: { flexDirection: "row", alignItems: "center", padding: 12, borderRadius: 10, borderWidth: 1, gap: 12 },
-  av: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  avText: { fontSize: 14, fontWeight: "700" },
   patientName: { fontSize: 14, fontWeight: "600" },
   patientMeta: { fontSize: 12 },
 

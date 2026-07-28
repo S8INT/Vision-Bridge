@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,54 +10,15 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, CareCoordinationStatus } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
-
-function getPriorityVariant(p: string) {
-  if (p === "Emergency") return "urgent";
-  if (p === "Urgent") return "warning";
-  return "muted";
-}
-
-function getStatusColor(status: CareCoordinationStatus, colors: ReturnType<typeof useColors>) {
-  switch (status) {
-    case "Completed": return colors.success;
-    case "Reviewed": return colors.success;
-    case "InReview": return colors.warning;
-    case "Assigned": return colors.accent;
-    case "Referred": return colors.primary;
-    case "Cancelled": return colors.mutedForeground;
-    default: return colors.mutedForeground;
-  }
-}
-
-function getStatusVariant(status: CareCoordinationStatus) {
-  switch (status) {
-    case "Completed":
-    case "Reviewed":
-      return "success";
-    case "InReview":
-      return "warning";
-    case "Assigned":
-      return "referral";
-    case "Referred":
-      return "default";
-    case "Cancelled":
-      return "muted";
-    default:
-      return "muted";
-  }
-}
-
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString("en-UG", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-UG", { month: "short", day: "numeric", year: "numeric" });
-}
+import { fmtDate, fmtDateTime } from "@/utils/date";
+import { InfoRow } from "@/components/ui/InfoRow";
+import { getCareStatusColor, getCareStatusVariant, getPriorityVariant } from "@/utils/status";
+import { Avatar } from "@/components/ui/Avatar";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const colors = useColors();
@@ -66,16 +26,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>{title}</Text>
       {children}
-    </View>
-  );
-}
-
-function InfoRow({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
-  const colors = useColors();
-  return (
-    <View style={styles.infoRow}>
-      <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>{label}</Text>
-      <Text style={[styles.infoValue, { color: valueColor ?? colors.foreground }]} numberOfLines={3}>{value}</Text>
     </View>
   );
 }
@@ -97,7 +47,6 @@ function ActionButton({ icon, label, color, onPress, disabled }: { icon: keyof t
 export default function ConsultationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const {
     consultations, getPatient, screenings,
     updateConsultation, currentUser, doctors,
@@ -123,8 +72,7 @@ export default function ConsultationDetailScreen() {
   const [careNotes, setCareNotes] = useState(consultation?.careCoordinatorNotes ?? "");
   const [selectedDoctorId, setSelectedDoctorId] = useState(consultation?.assignedDoctorId ?? "");
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   if (!consultation) {
     return (
@@ -136,7 +84,7 @@ export default function ConsultationDetailScreen() {
 
   const activeConsultation = consultation;
   const isClosed = consultation.status === "Completed" || consultation.status === "Cancelled";
-  const statusColor = getStatusColor(consultation.status, colors);
+  const statusColor = getCareStatusColor(consultation.status, colors);
 
   async function handleRoundRobinAssign() {
     const doc = await assignRoundRobin(activeConsultation.id);
@@ -303,9 +251,7 @@ export default function ConsultationDetailScreen() {
           style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}
         >
           <View style={styles.patientRow}>
-            <View style={[styles.avatar, { backgroundColor: colors.primary + "18" }]}>
-              <Text style={[styles.avatarText, { color: colors.primary }]}>{patient.firstName[0]}{patient.lastName[0]}</Text>
-            </View>
+            <Avatar firstName={patient.firstName} lastName={patient.lastName} size={44} fontSize={16} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.patientName, { color: colors.foreground }]}>{patient.firstName} {patient.lastName}</Text>
               <Text style={[styles.patientMeta, { color: colors.mutedForeground }]}>{patient.patientId} · {patient.village}</Text>
@@ -437,10 +383,10 @@ export default function ConsultationDetailScreen() {
       {(consultation.careCoordinatorNotes || consultation.followUpDate) && !showCareCoordForm ? (
         <Section title="CARE COORDINATION">
           {consultation.careCoordinatorNotes ? (
-            <InfoRow label="Coordinator Notes" value={consultation.careCoordinatorNotes} />
+            <InfoRow labelFlex={0.45} label="Coordinator Notes" value={consultation.careCoordinatorNotes} />
           ) : null}
           {consultation.followUpDate ? (
-            <InfoRow label="Follow-up Date" value={fmtDate(consultation.followUpDate)} valueColor={colors.primary} />
+            <InfoRow labelFlex={0.45} label="Follow-up Date" value={fmtDate(consultation.followUpDate)} valueColor={colors.primary} />
           ) : null}
           <TouchableOpacity onPress={() => setShowCareCoordForm(true)}>
             <Text style={[styles.editLink, { color: colors.primary }]}>Edit care plan</Text>
@@ -612,8 +558,6 @@ const styles = StyleSheet.create({
   confirmBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
 
   patientRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 16, fontWeight: "700" },
   patientName: { fontSize: 15, fontWeight: "600" },
   patientMeta: { fontSize: 12 },
   history: { fontSize: 11, marginTop: 2 },
@@ -645,9 +589,6 @@ const styles = StyleSheet.create({
   editLink: { fontSize: 13, fontWeight: "600" },
   bodyText: { fontSize: 14, lineHeight: 22 },
 
-  infoRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
-  infoLabel: { fontSize: 13, flex: 0.45 },
-  infoValue: { fontSize: 13, fontWeight: "500", flex: 0.55, textAlign: "right" },
 
   ghostBtn: {
     flexDirection: "row",

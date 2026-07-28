@@ -18,6 +18,7 @@ import type {
   Patient, Screening, Consultation, Referral, Campaign,
   RiskLevel,
 } from "@/context/AppContext";
+import { fmtShortDate } from "@/utils/date";
 
 const API_BASE = (process.env["EXPO_PUBLIC_API_URL"] ?? `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api-server/api`);
 
@@ -122,7 +123,7 @@ export function computeScreeningVolume(screenings: Screening[], days: number = 1
     const dateStr = d.toISOString().slice(0, 10);
     const dayScreenings = screenings.filter((s) => s.capturedAt.startsWith(dateStr));
     points.push({
-      label: d.toLocaleDateString("en-UG", { month: "short", day: "numeric" }),
+      label: fmtShortDate(d),
       date: dateStr,
       count: dayScreenings.length,
       highRisk: dayScreenings.filter((s) => s.aiRiskLevel === "Severe" || s.aiRiskLevel === "Urgent").length,

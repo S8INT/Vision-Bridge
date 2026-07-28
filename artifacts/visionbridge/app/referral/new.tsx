@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,10 +10,11 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, ReferralType } from "@/context/AppContext";
+import { Avatar } from "@/components/ui/Avatar";
 
 const FACILITIES_INTERNAL = [
   { name: "Kampala International Eye Institute", district: "Kampala" },
@@ -33,7 +33,6 @@ const FACILITIES_EXTERNAL = [
 export default function NewReferralScreen() {
   const { consultationId, patientId } = useLocalSearchParams<{ consultationId: string; patientId: string }>();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { addReferral, updateConsultation, updateScreening, addNotification, getPatient, consultations, screenings, currentUser } = useApp();
 
   const patient = getPatient(patientId);
@@ -50,8 +49,7 @@ export default function NewReferralScreen() {
   const [escortRequired, setEscortRequired] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   const facilities = referralType === "Internal" ? FACILITIES_INTERNAL : FACILITIES_EXTERNAL;
 
@@ -118,9 +116,7 @@ export default function NewReferralScreen() {
     >
       {patient ? (
         <View style={[styles.patientBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[styles.av, { backgroundColor: colors.primary + "18" }]}>
-            <Text style={[styles.avText, { color: colors.primary }]}>{patient.firstName[0]}{patient.lastName[0]}</Text>
-          </View>
+          <Avatar firstName={patient.firstName} lastName={patient.lastName} size={44} fontSize={16} />
           <View>
             <Text style={[styles.patientName, { color: colors.foreground }]}>{patient.firstName} {patient.lastName}</Text>
             <Text style={[styles.patientMeta, { color: colors.mutedForeground }]}>{patient.patientId} · {patient.village}</Text>
@@ -218,8 +214,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 16, gap: 16 },
   patientBanner: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 12, padding: 14 },
-  av: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  avText: { fontSize: 16, fontWeight: "700" },
   patientName: { fontSize: 15, fontWeight: "600" },
   patientMeta: { fontSize: 12 },
   section: { gap: 8 },

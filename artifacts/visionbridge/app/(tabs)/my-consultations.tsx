@@ -3,7 +3,6 @@ import {
   Animated,
   ActivityIndicator,
   FlatList,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -13,11 +12,12 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, type Consultation, type Patient } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
+import { fmtShortDate } from "@/utils/date";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type FilterTab = "Active" | "Completed" | "All";
@@ -49,7 +49,7 @@ function formatRelDate(iso: string) {
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
   if (days < 7) return `${days} days ago`;
-  return d.toLocaleDateString("en-UG", { month: "short", day: "numeric" });
+  return fmtShortDate(d);
 }
 
 // ── Status Timeline ─────────────────────────────────────────────────────────────
@@ -204,7 +204,6 @@ function ConsultCard({ consultation, onPress, highlighted }: {
 // ── Main Screen ────────────────────────────────────────────────────────────────
 export default function MyConsultationsScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { user, accessToken } = useAuth();
   const { consultations, patients, refresh: appRefresh } = useApp();
   const { highlightId } = useLocalSearchParams<{ highlightId?: string }>();
@@ -326,8 +325,7 @@ export default function MyConsultationsScreen() {
     All:       displayConsultations.length,
   }), [displayConsultations]);
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   // ── Loading state ────────────────────────────────────────────────────────────
   if (loadingProfile || loadingConsults) {

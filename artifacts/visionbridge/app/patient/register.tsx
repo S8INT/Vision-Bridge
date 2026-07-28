@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,9 +10,9 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, PatientSex } from "@/context/AppContext";
 import { DateInput } from "@/components/ui/DateInput";
 
@@ -74,7 +73,6 @@ function InputField({
 
 export default function RegisterPatientScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { addPatient, patients } = useApp();
 
   const [firstName, setFirstName] = useState("");
@@ -87,8 +85,7 @@ export default function RegisterPatientScreen() {
   const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   function toggleCondition(c: string) {
     setSelectedConditions((prev) =>
