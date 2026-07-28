@@ -6,6 +6,31 @@ import { logger } from "../lib/logger.js";
 
 const router = Router();
 
+/**
+ * Distinguish a genuine "object not found" storage error from an operational
+ * failure (network, credentials, bucket policy). Conflating the two — as the
+ * previous `catch { res.status(404) }` did — masked real MinIO outages behind a
+ * misleading 404 and logged nothing. Not-found → 404; anything else → logged
+ * and surfaced as 502 so the caller knows storage is unhealthy, not empty.
+ */
+function isNotFoundError(err: unknown): boolean {
+  const code = (err as { code?: string })?.code ?? "";
+  const statusCode = (err as { statusCode?: number })?.statusCode;
+  return (
+    statusCode === 404 ||
+    /^(NoSuchKey|NotFound|NoSuchBucket|ResourceNotFound)$/i.test(code)
+  );
+}
+
+function respondStorageError(res: import("express").Response, err: unknown, context: string, notFoundMsg: string): void {
+  if (isNotFoundError(err)) {
+    res.status(404).json({ error: notFoundMsg });
+    return;
+  }
+  logger.error({ err: (err as Error)?.message ?? err, context }, "MinIO storage operation failed");
+  res.status(502).json({ error: "Storage backend error", context });
+}
+
 // In-memory store for dev/fallback (when MinIO not configured)
 const localImageStore = new Map<string, {
   originalBuffer: Buffer;
@@ -175,8 +200,8 @@ router.get("/:imageId", async (req, res) => {
       const objectName = imageId.includes("/") ? imageId : `patients/${imageId.split("_")[1]}/retinal/${imageId}.jpg`;
       const url = await getPresignedUrl(client, bucket, objectName, 3600);
       res.json({ url, expiresIn: 3600 });
-    } catch (err: any) {
-      res.status(404).json({ error: "Image not found in MinIO" });
+    } catch (err) {
+      respondStorageError(res, err, "getImage", "Image not found in MinIO");
     }
     return;
   }
@@ -215,8 +240,8 @@ router.get("/:imageId/thumbnail", async (req, res) => {
       const thumbName = `patients/${imageId.split("_")[1]}/retinal/thumb_${imageId}.jpg`;
       const url = await getPresignedUrl(client, bucket, thumbName, 3600);
       res.json({ url, expiresIn: 3600, type: "thumbnail" });
-    } catch {
-      res.status(404).json({ error: "Thumbnail not found" });
+    } catch (err) {
+      respondStorageError(res, err, "getThumbnail", "Thumbnail not found");
     }
     return;
   }
@@ -285,8 +310,8 @@ router.delete("/:imageId", async (req, res) => {
       const thumbName = `patients/${imageId.split("_")[1]}/retinal/thumb_${imageId}.jpg`;
       await Promise.all([deleteFromMinio(client, bucket, objectName), deleteFromMinio(client, bucket, thumbName)]);
       res.json({ deleted: true, imageId });
-    } catch {
-      res.status(404).json({ error: "Image not found in MinIO" });
+    } catch (err) {
+      respondStorageError(res, err, "deleteImage", "Image not found in MinIO");
     }
     return;
   }

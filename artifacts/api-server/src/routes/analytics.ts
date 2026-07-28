@@ -169,7 +169,25 @@ router.post("/dhis2/push", async (req, res) => {
         },
         body: JSON.stringify(payload),
       });
-      const result = await response.json();
+      // DHIS2 signals rejected imports via HTTP status; a non-2xx response must
+      // not be reported to the caller as a successful push.
+      const rawBody = await response.text();
+      let result: unknown = rawBody;
+      try {
+        result = rawBody ? JSON.parse(rawBody) : null;
+      } catch {
+        // Upstream returned a non-JSON body (e.g. an HTML error page) — keep raw text.
+      }
+      if (!response.ok) {
+        return res.status(502).json({
+          error: "DHIS2 push rejected by server",
+          dhis2Status: response.status,
+          dhis2Response: result,
+          period,
+          orgUnit,
+          payload,
+        });
+      }
       return res.json({ ok: true, dhis2Response: result, period, orgUnit, dataValues });
     } catch (err: any) {
       return res.status(502).json({ error: "DHIS2 push failed", details: err.message, payload });
