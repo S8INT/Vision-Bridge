@@ -24,6 +24,13 @@ server.on("upgrade", (req, socket, head) => {
   handleUpgrade(req, socket as import("net").Socket, head);
 });
 
+// A server 'error' event (e.g. EADDRINUSE, EACCES) with no listener is thrown
+// as an uncaught exception with an unhelpful stack — surface it explicitly.
+server.on("error", (err: NodeJS.ErrnoException) => {
+  logger.fatal({ err, port }, "HTTP server error — shutting down");
+  process.exit(1);
+});
+
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
 });

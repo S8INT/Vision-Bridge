@@ -9,6 +9,11 @@ export function getSignalingServer(): WebSocketServer {
   if (!wss) {
     wss = new WebSocketServer({ noServer: true });
     wss.on("connection", handleConnection);
+    // Without an 'error' listener an emitted server error is rethrown and crashes
+    // the process.
+    wss.on("error", (err) => {
+      logger.error({ err }, "WebSocket signaling server error");
+    });
   }
   return wss;
 }
@@ -48,6 +53,39 @@ function handleConnection(ws: WebSocket, _req: IncomingMessage) {
       return;
     }
 
+    try {
+      routeSignalMessage(ws, msg);
+    } catch (err) {
+      // A relay failure for one message must not tear down the connection or the
+      // process — log it and inform the sender.
+      logger.error({ err, type: msg.type }, "Failed to handle signaling message");
+      try {
+        ws.send(JSON.stringify({ type: "error", message: "Failed to process message" }));
+      } catch {
+        // socket already gone — nothing more to do
+      }
+    }
+  });
+
+  // A per-socket 'error' event with no listener crashes the process.
+  ws.on("error", (err) => {
+    const meta = connMeta.get(ws);
+    logger.warn({ err, ...(meta ?? {}) }, "WebSocket connection error");
+  });
+
+  ws.on("close", () => {
+    const meta = connMeta.get(ws);
+    if (meta) {
+      const { roomId, peerId } = meta;
+      removePeer(roomId, peerId);
+      broadcast(roomId, peerId, { type: "peer-left", peerId });
+      connMeta.delete(ws);
+      logger.info({ roomId, peerId }, "Peer disconnected from call room");
+    }
+  });
+}
+
+function routeSignalMessage(ws: WebSocket, msg: SignalMessage): void {
     switch (msg.type) {
       case "join": {
         const { roomId, peerId, userId, role } = msg;
@@ -84,18 +122,6 @@ function handleConnection(ws: WebSocket, _req: IncomingMessage) {
         break;
       }
     }
-  });
-
-  ws.on("close", () => {
-    const meta = connMeta.get(ws);
-    if (meta) {
-      const { roomId, peerId } = meta;
-      removePeer(roomId, peerId);
-      broadcast(roomId, peerId, { type: "peer-left", peerId });
-      connMeta.delete(ws);
-      logger.info({ roomId, peerId }, "Peer disconnected from call room");
-    }
-  });
 }
 
 // Handle the HTTP → WS upgrade
