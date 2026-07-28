@@ -14,8 +14,6 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import {
   signAccessToken,
-  generateRefreshToken,
-  refreshTokenExpiresAt,
   verifyAccessToken,
 } from "../lib/jwt.js";
 import { verifyPassword, hashPassword } from "../lib/password.js";
@@ -26,47 +24,27 @@ import {
   updateUser,
   listUsers,
   addUser,
-  createSession,
   findSessionByToken,
   findSessionsByUser,
   revokeSession,
   revokeAllUserSessions,
   touchSession,
-  recordAuditEvent,
   getAuditLog,
   getDemoTenantId,
 } from "../lib/authStore.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { requireRole } from "../middlewares/rbac.js";
-import { canAccess } from "../lib/rbac.js";
+import {
+  ACCESS_TOKEN_TTL_SECONDS,
+  canAccessSummary,
+  issueSession,
+  sanitizeUser,
+} from "../lib/authSession.js";
+import { audit } from "../lib/audit.js";
+import { getClientIp, getDeviceId, paramStr } from "../lib/http.js";
 import { randomUUID } from "crypto";
 
 const router = Router();
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function getClientIp(req: Request): string {
-  return (
-    (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ??
-    req.socket.remoteAddress ??
-    "unknown"
-  );
-}
-
-function getDeviceId(req: Request): string {
-  return (req.headers["x-device-id"] as string) ?? randomUUID();
-}
-
-function paramStr(value: string | string[] | undefined): string {
-  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
-}
-
-function sanitizeUser(user: ReturnType<typeof findUserById> | null) {
-  if (!user) return null;
-  const { passwordHash, mfaSecret, mfaPendingSecret, ...safe } = user;
-  void passwordHash; void mfaSecret; void mfaPendingSecret;
-  return safe;
-}
 
 // ── Validation Schemas ───────────────────────────────────────────────────────
 
@@ -164,65 +142,26 @@ router.post("/register", async (req: Request, res: Response) => {
 
   addUser(newUser);
 
-  recordAuditEvent({
+  const deviceId = getDeviceId(req);
+
+  audit(req, {
     userId: id,
     tenantId: newUser.tenantId,
     event: "user.self_registered",
-    outcome: "success",
-    ipAddress: ip,
-    userAgent: req.headers["user-agent"] ?? "unknown",
-    deviceId: getDeviceId(req),
+    deviceId,
     metadata: { email, role, facility, district },
     dppaCategory: "user_management",
   });
 
   // Auto-issue tokens (skip MFA for fresh signups)
-  const deviceId = getDeviceId(req);
-  const refreshTokenStr = generateRefreshToken();
-  const expiresAt = refreshTokenExpiresAt();
-
-  const session = createSession({
-    userId: id,
-    tenantId: newUser.tenantId,
-    refreshToken: refreshTokenStr,
+  res.status(201).json(issueSession(req, {
+    user: newUser,
     deviceId,
     deviceName: (req.body?.deviceName as string) ?? "VisionBridge Mobile",
     devicePlatform: (req.body?.devicePlatform as string) ?? "expo",
-    ipAddress: ip,
-    userAgent: req.headers["user-agent"] ?? "unknown",
-    expiresAt,
-    revokedAt: null,
-  });
-
-  const accessToken = signAccessToken({
-    sub: id,
-    tenantId: newUser.tenantId,
-    role,
-    sessionId: session.id,
-    deviceId,
-    email: newUser.email,
-    fullName: newUser.fullName,
-  });
-
-  recordAuditEvent({
-    userId: id,
-    tenantId: newUser.tenantId,
-    event: "auth.login",
-    outcome: "success",
-    ipAddress: ip,
-    userAgent: req.headers["user-agent"] ?? "unknown",
-    deviceId,
-    metadata: { source: "registration_auto_login" },
-    dppaCategory: "authentication",
-  });
-
-  res.status(201).json({
-    accessToken,
-    refreshToken: refreshTokenStr,
-    expiresIn: 900,
-    user: sanitizeUser(newUser),
-    permissions: canAccessSummary(role),
-  });
+    auditEvent: "auth.login",
+    auditMetadata: { source: "registration_auto_login" },
+  }));
 });
 
 // ── POST /auth/login ─────────────────────────────────────────────────────────
@@ -246,13 +185,11 @@ router.post("/login", async (req: Request, res: Response) => {
   const user = findUserByEmail(email);
 
   if (!user || !user.isActive) {
-    recordAuditEvent({
+    audit(req, {
       userId: user?.id ?? null,
       tenantId: user?.tenantId ?? null,
       event: "login.failed",
       outcome: "failure",
-      ipAddress: ip,
-      userAgent: ua,
       deviceId: resolvedDeviceId,
       metadata: { reason: "user_not_found_or_inactive", email },
       dppaCategory: "authentication",
@@ -263,13 +200,11 @@ router.post("/login", async (req: Request, res: Response) => {
 
   const valid = await verifyPassword(password, user.passwordHash);
   if (!valid) {
-    recordAuditEvent({
+    audit(req, {
       userId: user.id,
       tenantId: user.tenantId,
       event: "login.failed",
       outcome: "failure",
-      ipAddress: ip,
-      userAgent: ua,
       deviceId: resolvedDeviceId,
       metadata: { reason: "wrong_password" },
       dppaCategory: "authentication",
@@ -297,15 +232,11 @@ router.post("/login", async (req: Request, res: Response) => {
       fullName: user.fullName,
     });
 
-    recordAuditEvent({
+    audit(req, {
       userId: user.id,
       tenantId: user.tenantId,
       event: "login.mfa_required",
-      outcome: "success",
-      ipAddress: ip,
-      userAgent: ua,
       deviceId: resolvedDeviceId,
-      metadata: null,
       dppaCategory: "authentication",
     });
 
@@ -314,49 +245,15 @@ router.post("/login", async (req: Request, res: Response) => {
   }
 
   // Issue full session
-  const refreshToken = generateRefreshToken();
-  const session = createSession({
-    userId: user.id,
-    tenantId: user.tenantId,
-    refreshToken,
-    deviceId: resolvedDeviceId,
-    deviceName: deviceName ?? "Unknown device",
-    devicePlatform: devicePlatform ?? "unknown",
-    ipAddress: ip,
-    userAgent: ua,
-    expiresAt: refreshTokenExpiresAt(),
-    revokedAt: null,
-  });
-
-  const accessToken = signAccessToken({
-    sub: user.id,
-    tenantId: user.tenantId,
-    role: user.role,
-    sessionId: session.id,
-    deviceId: resolvedDeviceId,
-    email: user.email,
-    fullName: user.fullName,
-  });
-
-  recordAuditEvent({
-    userId: user.id,
-    tenantId: user.tenantId,
-    event: "login.success",
-    outcome: "success",
-    ipAddress: ip,
-    userAgent: ua,
-    deviceId: resolvedDeviceId,
-    metadata: { sessionId: session.id },
-    dppaCategory: "authentication",
-  });
-
   res.json({
     mfaRequired: false,
-    accessToken,
-    refreshToken,
-    expiresIn: 900,
-    user: sanitizeUser(user),
-    permissions: canAccessSummary(user.role),
+    ...issueSession(req, {
+      user,
+      deviceId: resolvedDeviceId,
+      deviceName,
+      devicePlatform,
+      auditEvent: "login.success",
+    }),
   });
 });
 
@@ -398,64 +295,25 @@ router.post("/mfa/verify", async (req: Request, res: Response) => {
   const valid = verifyTotpCode(user.mfaSecret, code);
 
   if (!valid) {
-    recordAuditEvent({
+    audit(req, {
       userId: user.id,
       tenantId: user.tenantId,
       event: "mfa.verify.failed",
       outcome: "failure",
-      ipAddress: ip,
-      userAgent: ua,
       deviceId: payload.deviceId,
-      metadata: null,
       dppaCategory: "authentication",
     });
     res.status(401).json({ error: "Invalid MFA code" });
     return;
   }
 
-  const refreshToken = generateRefreshToken();
-  const session = createSession({
-    userId: user.id,
-    tenantId: user.tenantId,
-    refreshToken,
+  res.json(issueSession(req, {
+    user,
     deviceId: payload.deviceId,
     deviceName: "Mobile device",
     devicePlatform: "mobile",
-    ipAddress: ip,
-    userAgent: ua,
-    expiresAt: refreshTokenExpiresAt(),
-    revokedAt: null,
-  });
-
-  const accessToken = signAccessToken({
-    sub: user.id,
-    tenantId: user.tenantId,
-    role: user.role,
-    sessionId: session.id,
-    deviceId: payload.deviceId,
-    email: user.email,
-    fullName: user.fullName,
-  });
-
-  recordAuditEvent({
-    userId: user.id,
-    tenantId: user.tenantId,
-    event: "mfa.verify.success",
-    outcome: "success",
-    ipAddress: ip,
-    userAgent: ua,
-    deviceId: payload.deviceId,
-    metadata: { sessionId: session.id },
-    dppaCategory: "authentication",
-  });
-
-  res.json({
-    accessToken,
-    refreshToken,
-    expiresIn: 900,
-    user: sanitizeUser(user),
-    permissions: canAccessSummary(user.role),
-  });
+    auditEvent: "mfa.verify.success",
+  }));
 });
 
 // ── POST /auth/refresh ───────────────────────────────────────────────────────
@@ -477,13 +335,11 @@ router.post("/refresh", async (req: Request, res: Response) => {
   const session = findSessionByToken(refreshToken);
 
   if (!session || session.revokedAt || session.expiresAt < new Date()) {
-    recordAuditEvent({
+    audit(req, {
       userId: session?.userId ?? null,
       tenantId: session?.tenantId ?? null,
       event: "token.refresh.failed",
       outcome: "failure",
-      ipAddress: ip,
-      userAgent: ua,
       deviceId: session?.deviceId ?? null,
       metadata: { reason: session?.revokedAt ? "revoked" : session && session.expiresAt < new Date() ? "expired" : "not_found" },
       dppaCategory: "authentication",
@@ -510,19 +366,16 @@ router.post("/refresh", async (req: Request, res: Response) => {
     fullName: user.fullName,
   });
 
-  recordAuditEvent({
+  audit(req, {
     userId: user.id,
     tenantId: user.tenantId,
     event: "token.refresh.success",
-    outcome: "success",
-    ipAddress: ip,
-    userAgent: ua,
     deviceId: session.deviceId,
     metadata: { sessionId: session.id },
     dppaCategory: "authentication",
   });
 
-  res.json({ accessToken, expiresIn: 900 });
+  res.json({ accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS });
 });
 
 // ── POST /auth/logout ─────────────────────────────────────────────────────────
@@ -542,13 +395,10 @@ router.post("/logout", requireAuth, async (req: Request, res: Response) => {
     revokeSession(auth.sessionId);
   }
 
-  recordAuditEvent({
+  audit(req, {
     userId: auth.sub,
     tenantId: auth.tenantId,
     event: all ? "logout.all_sessions" : "logout.single_session",
-    outcome: "success",
-    ipAddress: ip,
-    userAgent: ua,
     deviceId: auth.deviceId,
     metadata: { sessionId: auth.sessionId },
     dppaCategory: "authentication",
@@ -581,8 +431,8 @@ router.get("/me", requireAuth, (req: Request, res: Response) => {
  * Initiate TOTP MFA setup — returns a TOTP secret and otpauth URL.
  * The client must confirm with a valid code before MFA is activated.
  */
-router.post("/mfa/setup", requireAuth, (_req: Request, res: Response) => {
-  const user = findUserById(_req.auth!.sub);
+router.post("/mfa/setup", requireAuth, (req: Request, res: Response) => {
+  const user = findUserById(req.auth!.sub);
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
@@ -591,15 +441,11 @@ router.post("/mfa/setup", requireAuth, (_req: Request, res: Response) => {
   const { secret, otpauthUrl } = generateTotpSecret(user.email);
   updateUser(user.id, { mfaPendingSecret: secret });
 
-  recordAuditEvent({
+  audit(req, {
     userId: user.id,
     tenantId: user.tenantId,
     event: "mfa.setup.initiated",
-    outcome: "success",
-    ipAddress: getClientIp(_req),
-    userAgent: _req.headers["user-agent"] ?? "unknown",
-    deviceId: _req.auth!.deviceId,
-    metadata: null,
+    deviceId: req.auth!.deviceId,
     dppaCategory: "settings",
   });
 
@@ -639,15 +485,11 @@ router.post("/mfa/confirm", requireAuth, (req: Request, res: Response) => {
     mfaPendingSecret: null,
   });
 
-  recordAuditEvent({
+  audit(req, {
     userId: user.id,
     tenantId: user.tenantId,
     event: "mfa.enabled",
-    outcome: "success",
-    ipAddress: getClientIp(req),
-    userAgent: req.headers["user-agent"] ?? "unknown",
     deviceId: req.auth!.deviceId,
-    metadata: null,
     dppaCategory: "settings",
   });
 
@@ -678,15 +520,11 @@ router.post("/mfa/disable", requireAuth, (req: Request, res: Response) => {
 
   updateUser(user.id, { mfaEnabled: false, mfaSecret: null, mfaPendingSecret: null });
 
-  recordAuditEvent({
+  audit(req, {
     userId: user.id,
     tenantId: user.tenantId,
     event: "mfa.disabled",
-    outcome: "success",
-    ipAddress: getClientIp(req),
-    userAgent: req.headers["user-agent"] ?? "unknown",
     deviceId: req.auth!.deviceId,
-    metadata: null,
     dppaCategory: "settings",
   });
 
@@ -736,13 +574,10 @@ router.delete("/sessions/:sessionId", requireAuth, (req: Request, res: Response)
 
   revokeSession(sessionId);
 
-  recordAuditEvent({
+  audit(req, {
     userId: req.auth!.sub,
     tenantId: req.auth!.tenantId,
     event: "session.revoked",
-    outcome: "success",
-    ipAddress: getClientIp(req),
-    userAgent: req.headers["user-agent"] ?? "unknown",
     deviceId: req.auth!.deviceId,
     metadata: { revokedSessionId: sessionId },
     dppaCategory: "session_management",
@@ -837,13 +672,10 @@ router.post(
 
     addUser(newUser);
 
-    recordAuditEvent({
+    audit(req, {
       userId: req.auth!.sub,
       tenantId: req.auth!.tenantId,
       event: "user.created",
-      outcome: "success",
-      ipAddress: getClientIp(req),
-      userAgent: req.headers["user-agent"] ?? "unknown",
       deviceId: req.auth!.deviceId,
       metadata: { newUserId: id, email: parse.data.email, role: parse.data.role },
       dppaCategory: "user_management",
@@ -874,13 +706,10 @@ router.patch(
 
     if (!isActive) revokeAllUserSessions(userId!);
 
-    recordAuditEvent({
+    audit(req, {
       userId: req.auth!.sub,
       tenantId: req.auth!.tenantId,
       event: isActive ? "user.activated" : "user.deactivated",
-      outcome: "success",
-      ipAddress: getClientIp(req),
-      userAgent: req.headers["user-agent"] ?? "unknown",
       deviceId: req.auth!.deviceId,
       metadata: { targetUserId: userId },
       dppaCategory: "user_management",
@@ -943,13 +772,10 @@ router.patch(
 
     const updated = updateUser(userId!, patch);
 
-    recordAuditEvent({
+    audit(req, {
       userId: req.auth!.sub,
       tenantId: req.auth!.tenantId,
       event: "user.updated",
-      outcome: "success",
-      ipAddress: getClientIp(req),
-      userAgent: req.headers["user-agent"] ?? "unknown",
       deviceId: req.auth!.deviceId,
       metadata: { targetUserId: userId, fields: Object.keys(patch) },
       dppaCategory: "user_management",
@@ -993,13 +819,10 @@ router.delete(
     updateUser(userId!, { isActive: false });
     revokeAllUserSessions(userId!);
 
-    recordAuditEvent({
+    audit(req, {
       userId: req.auth!.sub,
       tenantId: req.auth!.tenantId,
       event: "user.removed",
-      outcome: "success",
-      ipAddress: getClientIp(req),
-      userAgent: req.headers["user-agent"] ?? "unknown",
       deviceId: req.auth!.deviceId,
       metadata: { targetUserId: userId, targetEmail: target.email, targetRole: target.role },
       dppaCategory: "user_management",
@@ -1025,15 +848,11 @@ router.post("/dppa/consent", requireAuth, (req: Request, res: Response) => {
 
   updateUser(user.id, { dppaConsentAt: new Date(), dppaConsentIp: ip });
 
-  recordAuditEvent({
+  audit(req, {
     userId: user.id,
     tenantId: user.tenantId,
     event: "dppa.consent_recorded",
-    outcome: "success",
-    ipAddress: ip,
-    userAgent: req.headers["user-agent"] ?? "unknown",
     deviceId: req.auth!.deviceId,
-    metadata: null,
     dppaCategory: "dppa_compliance",
   });
 
@@ -1056,15 +875,11 @@ router.get("/dppa/my-data", requireAuth, (req: Request, res: Response) => {
 
   const authHistory = getAuditLog({ userId: user.id, limit: 1000 });
 
-  recordAuditEvent({
+  audit(req, {
     userId: user.id,
     tenantId: user.tenantId,
     event: "dppa.data_export",
-    outcome: "success",
-    ipAddress: getClientIp(req),
-    userAgent: req.headers["user-agent"] ?? "unknown",
     deviceId: req.auth!.deviceId,
-    metadata: null,
     dppaCategory: "dppa_compliance",
   });
 
@@ -1165,87 +980,26 @@ router.post("/setup", async (req: Request, res: Response) => {
 
   addUser(newAdmin);
 
-  recordAuditEvent({
+  const deviceId = getDeviceId(req);
+
+  audit(req, {
     userId: id,
     tenantId,
     event: "user.first_admin_created",
-    outcome: "success",
-    ipAddress: ip,
-    userAgent: req.headers["user-agent"] ?? "unknown",
-    deviceId: getDeviceId(req),
+    deviceId,
     metadata: { email, facility, district },
     dppaCategory: "user_management",
   });
 
-  const deviceId = getDeviceId(req);
-  const refreshTokenStr = generateRefreshToken();
-  const expiresAt = refreshTokenExpiresAt();
-
-  const session = createSession({
-    userId: id,
-    tenantId,
-    refreshToken: refreshTokenStr,
+  res.status(201).json(issueSession(req, {
+    user: newAdmin,
     deviceId,
     deviceName: (req.body?.deviceName as string) ?? "VisionBridge Mobile",
     devicePlatform: (req.body?.devicePlatform as string) ?? "expo",
-    ipAddress: ip,
-    userAgent: req.headers["user-agent"] ?? "unknown",
-    expiresAt,
-    revokedAt: null,
-  });
-
-  const accessToken = signAccessToken({
-    sub: id,
-    tenantId,
-    role: "Admin",
-    sessionId: session.id,
-    deviceId,
-    email: newAdmin.email,
-    fullName: newAdmin.fullName,
-  });
-
-  recordAuditEvent({
-    userId: id,
-    tenantId,
-    event: "auth.login",
-    outcome: "success",
-    ipAddress: ip,
-    userAgent: req.headers["user-agent"] ?? "unknown",
-    deviceId,
-    metadata: { source: "first_admin_setup" },
-    dppaCategory: "authentication",
-  });
-
-  res.status(201).json({
-    accessToken,
-    refreshToken: refreshTokenStr,
-    expiresIn: 900,
-    user: sanitizeUser(newAdmin),
-    permissions: canAccessSummary("Admin"),
-  });
+    auditEvent: "auth.login",
+    auditMetadata: { source: "first_admin_setup" },
+  }));
 });
-
-// ── Permissions helper ────────────────────────────────────────────────────────
-
-type PermissionSummary = Record<string, Record<string, boolean>>;
-
-function canAccessSummary(role: import("../lib/rbac.js").Role): PermissionSummary {
-  const resources = [
-    "patient", "image", "aiResults", "consultation", "referral",
-    "billing", "analytics", "models", "tenantConfig", "session",
-    "auditLog", "users",
-  ] as const;
-  const actions = ["create", "read", "update", "delete", "upload", "view", "manage", "list"] as const;
-
-  const result: PermissionSummary = {};
-  for (const resource of resources) {
-    result[resource] = {};
-    for (const action of actions) {
-      result[resource]![action] = canAccess(role, resource as import("../lib/rbac.js").Resource, action as import("../lib/rbac.js").Action);
-    }
-  }
-  return result;
-}
 
 // ── Push notification token registration ──────────────────────────────────────
 router.put("/push-token", requireAuth, (req: Request, res: Response) => {

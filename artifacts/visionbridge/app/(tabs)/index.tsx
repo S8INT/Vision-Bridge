@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import {
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,8 +8,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useApp } from "@/context/AppContext";
 import { useAuth, type UserRole } from "@/context/AuthContext";
@@ -20,6 +19,7 @@ import { ScreeningCard } from "@/components/ScreeningCard";
 import { ConsultationCard } from "@/components/ConsultationCard";
 import { RoleAnalytics } from "@/components/analytics/RoleAnalytics";
 import { SyncBanner } from "@/components/SyncBanner";
+import { fmtDate } from "@/utils/date";
 
 // ── Role metadata displayed at top of each dashboard ─────────────────────────
 
@@ -148,7 +148,6 @@ function useStatsData() {
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function DashboardScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const r = useResponsive();
   const { patients, screenings, consultations, appointments, campaigns, unreadCount, isOnline, isSyncing, lastSyncAt, lastSyncError, pendingCount, refresh } = useApp();
   const { user, logout } = useAuth();
@@ -215,8 +214,7 @@ export default function DashboardScreen() {
     [consultations],
   );
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -580,7 +578,7 @@ export default function DashboardScreen() {
           >
             <Text style={styles.reportTitle}>{myLatestReport.diagnosis ?? "Eye Consultation"}</Text>
             <Text style={styles.reportMeta}>
-              {myLatestReport.assignedTo ?? "Specialist"} · {myLatestReport.respondedAt ? new Date(myLatestReport.respondedAt).toLocaleDateString("en-UG", { month: "short", day: "numeric", year: "numeric" }) : ""}
+              {myLatestReport.assignedTo ?? "Specialist"} · {myLatestReport.respondedAt ? fmtDate(myLatestReport.respondedAt) : ""}
             </Text>
             {myLatestReport.specialistResponse && (
               <Text style={styles.reportPreview} numberOfLines={3}>{myLatestReport.specialistResponse}</Text>

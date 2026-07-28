@@ -1,7 +1,6 @@
 import React from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,46 +9,26 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, CampaignStatus, Screening, Patient } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
 import { getRiskVariant } from "@/utils/risk";
-
-function getCampaignVariant(status: CampaignStatus) {
-  if (status === "Active") return "success";
-  if (status === "Completed") return "referral";
-  if (status === "Cancelled") return "urgent";
-  return "muted";
-}
-
-function progressPercent(screened: number, target: number) {
-  return target > 0 ? Math.min(100, Math.round((screened / target) * 100)) : 0;
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  const colors = useColors();
-  return (
-    <View style={styles.infoRow}>
-      <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>{label}</Text>
-      <Text style={[styles.infoValue, { color: colors.foreground }]} numberOfLines={2}>{value}</Text>
-    </View>
-  );
-}
+import { InfoRow } from "@/components/ui/InfoRow";
+import { getCampaignVariant, progressPercent } from "@/utils/campaign";
+import { Avatar } from "@/components/ui/Avatar";
 
 export default function CampaignDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { campaigns, getCampaignScreenings, getCampaignPatients, updateCampaign, addNotification, getConsultationForScreening } = useApp();
 
   const campaign = campaigns.find((c) => c.id === id);
   const screenings = campaign ? getCampaignScreenings(campaign.id) : [];
   const patients = campaign ? getCampaignPatients(campaign.id) : [];
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   if (!campaign) {
     return (
@@ -105,9 +84,7 @@ export default function CampaignDetailScreen() {
         activeOpacity={0.8}
         style={[styles.patientRow, { borderBottomColor: colors.border }]}
       >
-        <View style={[styles.av, { backgroundColor: colors.primary + "18" }]}>
-          <Text style={[styles.avText, { color: colors.primary }]}>{patient.firstName[0]}{patient.lastName[0]}</Text>
-        </View>
+        <Avatar firstName={patient.firstName} lastName={patient.lastName} size={38} fontSize={14} />
         <View style={{ flex: 1 }}>
           <Text style={[styles.patientName, { color: colors.foreground }]}>{patient.firstName} {patient.lastName}</Text>
           <Text style={[styles.patientMeta, { color: colors.mutedForeground }]}>{patient.patientId}</Text>
@@ -252,17 +229,12 @@ const styles = StyleSheet.create({
   riskBreakdown: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   riskStat: { flexDirection: "row", alignItems: "center", gap: 6 },
   riskCount: { fontSize: 13, fontWeight: "600" },
-  infoRow: { flexDirection: "row", justifyContent: "space-between", gap: 12, alignItems: "flex-start" },
-  infoLabel: { fontSize: 13, flex: 0.4 },
-  infoValue: { fontSize: 13, fontWeight: "500", flex: 0.6, textAlign: "right" },
   actions: { gap: 10 },
   actionBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14, borderRadius: 12 },
   actionBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
   cancelBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 13, borderRadius: 12, borderWidth: 1.5 },
   cancelBtnText: { fontSize: 14, fontWeight: "600" },
   patientRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderBottomWidth: 1 },
-  av: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
-  avText: { fontSize: 14, fontWeight: "700" },
   patientName: { fontSize: 14, fontWeight: "600" },
   patientMeta: { fontSize: 12 },
   screeningBadges: { flexDirection: "row", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" },

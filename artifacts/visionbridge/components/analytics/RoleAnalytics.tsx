@@ -5,6 +5,7 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { useApp, type RiskLevel } from "@/context/AppContext";
 import { useAuth, type UserRole } from "@/context/AuthContext";
 import { BarChart, DonutChart, Sparkline, Legend, type ChartDatum } from "./charts";
+import { fmtWeekday } from "@/utils/date";
 
 const RISK_COLORS: Record<RiskLevel, string> = {
   Normal: "#10b981",
@@ -34,7 +35,7 @@ function lastNDays(n: number) {
     d.setDate(today.getDate() - i);
     out.push({
       key: d.toISOString().slice(0, 10),
-      label: d.toLocaleDateString("en-UG", { weekday: "short" }).slice(0, 1),
+      label: fmtWeekday(d).slice(0, 1),
       date: d,
     });
   }

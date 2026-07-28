@@ -12,6 +12,7 @@ import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { useWebRTC, type CallMode, type QualityLevel } from "@/hooks/useWebRTC";
 import { VideoStream } from "@/components/VideoStream";
+import { fmtDuration } from "@/utils/date";
 
 // ── Quality badge ─────────────────────────────────────────────────────────────
 const QUALITY_CONFIG: Record<QualityLevel, { color: string; dot: string; label: string }> = {
@@ -104,12 +105,6 @@ function useAsyncRecorder() {
   }, []);
 
   return { recording, elapsed, blobUrl, previewRef, start, stop, reset };
-}
-
-function fmtSec(s: number) {
-  const m = Math.floor(s / 60).toString().padStart(2, "0");
-  const sc = (s % 60).toString().padStart(2, "0");
-  return `${m}:${sc}`;
 }
 
 // ── Playback component (web) ──────────────────────────────────────────────────
@@ -280,7 +275,7 @@ export default function CallScreen() {
                   <>
                     <View style={ss.recIndicator}>
                       <View style={ss.recDot} />
-                      <Text style={ss.recTimer}>{fmtSec(asyncRec.elapsed)} / 1:30</Text>
+                      <Text style={ss.recTimer}>{fmtDuration(asyncRec.elapsed)} / 1:30</Text>
                     </View>
                     <TouchableOpacity style={[ss.bigBtn, { backgroundColor: "#ef4444" }]} onPress={asyncRec.stop}>
                       <Feather name="square" size={18} color="#fff" />
@@ -297,7 +292,7 @@ export default function CallScreen() {
               </>
             ) : (
               <>
-                <Text style={[ss.asyncBody, { color: "#10b981", marginBottom: 8 }]}>Recording complete ({fmtSec(asyncRec.elapsed)})</Text>
+                <Text style={[ss.asyncBody, { color: "#10b981", marginBottom: 8 }]}>Recording complete ({fmtDuration(asyncRec.elapsed)})</Text>
                 <AsyncPlayer blobUrl={asyncRec.blobUrl} />
                 <View style={ss.asyncActions}>
                   <TouchableOpacity style={[ss.bigBtn, { backgroundColor: "#10b981", flex: 1 }]} onPress={() => {

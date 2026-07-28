@@ -15,7 +15,16 @@ import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { db, patientsTable, type Patient } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
-import { recordAuditEvent, findUserById } from "../lib/authStore.js";
+import { findUserById } from "../lib/authStore.js";
+import { audit } from "../lib/audit.js";
+import {
+  allowRoles,
+  forbidRoles,
+  handleServerError,
+  parseBody,
+  requireAuthContext,
+  requireDb,
+} from "../lib/http.js";
 
 const router: IRouter = Router();
 
@@ -35,15 +44,16 @@ const profileSchema = z.object({
 
 const updateSchema = profileSchema.partial();
 
-function dbAvailable(): boolean {
-  return Boolean(db);
-}
-
 function generateMrn(): string {
   const d = new Date();
   const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   const rand = Math.floor(1000 + Math.random() * 9000);
   return `VB-${stamp}-${rand}`;
+}
+
+/** Drops keys explicitly set to `undefined` so partial updates skip them. */
+function definedFields<T extends Record<string, unknown>>(data: T): Partial<T> {
+  return Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 
 async function findMyPatient(userId: string): Promise<Patient | null> {
@@ -54,36 +64,30 @@ async function findMyPatient(userId: string): Promise<Patient | null> {
 
 // ── GET /me ─────────────────────────────────────────────────────────────────
 router.get("/me", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
-  if (!dbAvailable()) { res.status(503).json({ error: "Database unavailable" }); return; }
+  const auth = requireAuthContext(req, res);
+  if (!auth || !requireDb(res)) return;
 
   try {
-    const patient = await findMyPatient(req.auth.sub);
+    const patient = await findMyPatient(auth.sub);
     if (!patient) { res.status(404).json({ error: "No patient profile yet", code: "NO_PROFILE" }); return; }
     res.json({ patient });
   } catch (err) {
-    console.error("[patients] GET /me failed:", err);
-    res.status(500).json({ error: "Failed to load profile" });
+    handleServerError(res, "patients", err, "Failed to load profile");
   }
 });
 
 // ── POST /me  (create) ──────────────────────────────────────────────────────
 router.post("/me", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
-  if (req.auth.role !== "Patient") {
-    res.status(403).json({ error: "Only Patient users can create their own profile" });
-    return;
-  }
-  if (!dbAvailable()) { res.status(503).json({ error: "Database unavailable" }); return; }
+  const auth = requireAuthContext(req, res);
+  if (!auth) return;
+  if (!allowRoles(auth, res, ["Patient"], "Only Patient users can create their own profile")) return;
+  if (!requireDb(res)) return;
 
-  const parsed = profileSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid profile data", details: parsed.error.issues });
-    return;
-  }
+  const data = parseBody(profileSchema, req, res, "Invalid profile data");
+  if (!data) return;
 
   try {
-    const existing = await findMyPatient(req.auth.sub);
+    const existing = await findMyPatient(auth.sub);
     if (existing) {
       res.status(409).json({ error: "Profile already exists", patient: existing });
       return;
@@ -92,115 +96,86 @@ router.post("/me", async (req: Request, res: Response) => {
     const [created] = await db!
       .insert(patientsTable)
       .values({
-        tenantId: req.auth.tenantId,
-        userId: req.auth.sub,
+        tenantId: auth.tenantId,
+        userId: auth.sub,
         patientId: generateMrn(),
-        firstName: parsed.data.firstName,
-        lastName: parsed.data.lastName,
-        dateOfBirth: parsed.data.dateOfBirth ?? null,
-        sex: parsed.data.sex ?? null,
-        phone: parsed.data.phone ?? null,
-        village: parsed.data.village ?? null,
-        district: parsed.data.district ?? null,
-        medicalHistory: parsed.data.medicalHistory ?? [],
+        firstName: data.firstName,
+        lastName: data.lastName,
+        dateOfBirth: data.dateOfBirth ?? null,
+        sex: data.sex ?? null,
+        phone: data.phone ?? null,
+        village: data.village ?? null,
+        district: data.district ?? null,
+        medicalHistory: data.medicalHistory ?? [],
       })
       .returning();
 
-    recordAuditEvent({
-      userId: req.auth.sub,
-      tenantId: req.auth.tenantId,
+    audit(req, {
+      userId: auth.sub,
+      tenantId: auth.tenantId,
       event: "patient.profile.created",
-      outcome: "success",
-      ipAddress: req.ip ?? "unknown",
-      userAgent: String(req.headers["user-agent"] ?? "unknown"),
-      deviceId: null,
       metadata: { patientId: created.patientId },
       dppaCategory: "patient_self_registration",
     });
 
     res.status(201).json({ patient: created });
   } catch (err) {
-    console.error("[patients] POST /me failed:", err);
-    res.status(500).json({ error: "Failed to create profile" });
+    handleServerError(res, "patients", err, "Failed to create profile");
   }
 });
 
 // ── PUT /me  (update) ───────────────────────────────────────────────────────
 router.put("/me", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
-  if (!dbAvailable()) { res.status(503).json({ error: "Database unavailable" }); return; }
+  const auth = requireAuthContext(req, res);
+  if (!auth || !requireDb(res)) return;
 
-  const parsed = updateSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid profile data", details: parsed.error.issues });
-    return;
-  }
+  const data = parseBody(updateSchema, req, res, "Invalid profile data");
+  if (!data) return;
 
   try {
-    const existing = await findMyPatient(req.auth.sub);
+    const existing = await findMyPatient(auth.sub);
     if (!existing) { res.status(404).json({ error: "No patient profile to update", code: "NO_PROFILE" }); return; }
 
     const [updated] = await db!
       .update(patientsTable)
-      .set({
-        ...(parsed.data.firstName !== undefined ? { firstName: parsed.data.firstName } : {}),
-        ...(parsed.data.lastName !== undefined ? { lastName: parsed.data.lastName } : {}),
-        ...(parsed.data.dateOfBirth !== undefined ? { dateOfBirth: parsed.data.dateOfBirth } : {}),
-        ...(parsed.data.sex !== undefined ? { sex: parsed.data.sex } : {}),
-        ...(parsed.data.phone !== undefined ? { phone: parsed.data.phone } : {}),
-        ...(parsed.data.village !== undefined ? { village: parsed.data.village } : {}),
-        ...(parsed.data.district !== undefined ? { district: parsed.data.district } : {}),
-        ...(parsed.data.medicalHistory !== undefined ? { medicalHistory: parsed.data.medicalHistory } : {}),
-        updatedAt: new Date(),
-      })
+      .set({ ...definedFields(data), updatedAt: new Date() })
       .where(eq(patientsTable.id, existing.id))
       .returning();
 
-    recordAuditEvent({
-      userId: req.auth.sub,
-      tenantId: req.auth.tenantId,
+    audit(req, {
+      userId: auth.sub,
+      tenantId: auth.tenantId,
       event: "patient.profile.updated",
-      outcome: "success",
-      ipAddress: req.ip ?? "unknown",
-      userAgent: String(req.headers["user-agent"] ?? "unknown"),
-      deviceId: null,
-      metadata: { patientId: updated.patientId, fields: Object.keys(parsed.data) },
+      metadata: { patientId: updated.patientId, fields: Object.keys(data) },
       dppaCategory: "patient_self_update",
     });
 
     res.json({ patient: updated });
   } catch (err) {
-    console.error("[patients] PUT /me failed:", err);
-    res.status(500).json({ error: "Failed to update profile" });
+    handleServerError(res, "patients", err, "Failed to update profile");
   }
 });
 
 // ── GET / (clinician list) ──────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
-  if (req.auth.role === "Patient") { res.status(403).json({ error: "Forbidden" }); return; }
-  if (!dbAvailable()) { res.status(503).json({ error: "Database unavailable" }); return; }
+  const auth = requireAuthContext(req, res);
+  if (!auth || !forbidRoles(auth, res, ["Patient"]) || !requireDb(res)) return;
 
   try {
-    const rows = await db!.select().from(patientsTable).where(eq(patientsTable.tenantId, req.auth.tenantId));
+    const rows = await db!.select().from(patientsTable).where(eq(patientsTable.tenantId, auth.tenantId));
     res.json({ items: rows, patients: rows });
   } catch (err) {
-    console.error("[patients] GET / failed:", err);
-    res.status(500).json({ error: "Failed to list patients" });
+    handleServerError(res, "patients", err, "Failed to list patients");
   }
 });
 
 // ── POST / (clinician creates a patient record) ────────────────────────────
 router.post("/", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
-  if (req.auth.role === "Patient") { res.status(403).json({ error: "Forbidden" }); return; }
-  if (!dbAvailable()) { res.status(503).json({ error: "Database unavailable" }); return; }
+  const auth = requireAuthContext(req, res);
+  if (!auth || !forbidRoles(auth, res, ["Patient"]) || !requireDb(res)) return;
 
-  const parsed = profileSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid patient data", details: parsed.error.issues });
-    return;
-  }
+  const data = parseBody(profileSchema, req, res, "Invalid patient data");
+  if (!data) return;
 
   try {
     const body = req.body ?? {};
@@ -208,33 +183,29 @@ router.post("/", async (req: Request, res: Response) => {
       || generateMrn();
 
     // Resolve registering clinician's name
-    const registeredByUser = findUserById(req.auth.sub);
+    const registeredByUser = findUserById(auth.sub);
     const registeredByName = registeredByUser?.fullName ?? null;
 
     const [row] = await db!.insert(patientsTable).values({
-      tenantId: req.auth.tenantId,
+      tenantId: auth.tenantId,
       patientId,
-      firstName: parsed.data.firstName,
-      lastName: parsed.data.lastName,
-      dateOfBirth: parsed.data.dateOfBirth ?? null,
-      sex: parsed.data.sex ?? null,
-      phone: parsed.data.phone ?? null,
-      village: parsed.data.village ?? null,
-      district: parsed.data.district ?? null,
-      medicalHistory: parsed.data.medicalHistory ?? [],
+      firstName: data.firstName,
+      lastName: data.lastName,
+      dateOfBirth: data.dateOfBirth ?? null,
+      sex: data.sex ?? null,
+      phone: data.phone ?? null,
+      village: data.village ?? null,
+      district: data.district ?? null,
+      medicalHistory: data.medicalHistory ?? [],
       lastVisit: body.lastVisit ? new Date(body.lastVisit) : null,
-      registeredBy: req.auth.sub,
+      registeredBy: auth.sub,
       registeredByName,
     }).returning();
 
-    recordAuditEvent({
-      userId: req.auth.sub,
-      tenantId: req.auth.tenantId,
+    audit(req, {
+      userId: auth.sub,
+      tenantId: auth.tenantId,
       event: "patient.record.created",
-      outcome: "success",
-      ipAddress: req.ip ?? "unknown",
-      userAgent: String(req.headers["user-agent"] ?? "unknown"),
-      deviceId: null,
       metadata: { patientId: row.patientId, registeredByName },
       dppaCategory: "clinician_patient_registration",
     });
@@ -248,9 +219,8 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ── PATCH /:id (clinician updates a patient record) ────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
-  if (req.auth.role === "Patient") { res.status(403).json({ error: "Forbidden" }); return; }
-  if (!dbAvailable()) { res.status(503).json({ error: "Database unavailable" }); return; }
+  const auth = requireAuthContext(req, res);
+  if (!auth || !forbidRoles(auth, res, ["Patient"]) || !requireDb(res)) return;
   const id = String(req.params["id"] ?? "");
   try {
     const updates = { ...req.body };

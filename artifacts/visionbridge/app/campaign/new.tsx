@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,9 +10,9 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, CampaignType } from "@/context/AppContext";
 
 const CAMPAIGN_TYPES: { type: CampaignType; label: string; desc: string; icon: keyof typeof Feather.glyphMap }[] = [
@@ -25,7 +24,6 @@ const CAMPAIGN_TYPES: { type: CampaignType; label: string; desc: string; icon: k
 
 export default function NewCampaignScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { addCampaign, addNotification, currentUser } = useApp();
 
   const [type, setType] = useState<CampaignType | null>(null);
@@ -39,8 +37,7 @@ export default function NewCampaignScreen() {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   async function handleSave() {
     if (!type) { Alert.alert("Select Type", "Please choose a campaign type."); return; }

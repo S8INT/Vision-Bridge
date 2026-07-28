@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,11 +10,13 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, RiskLevel } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
+import { Avatar } from "@/components/ui/Avatar";
+import { getRiskColor } from "@/utils/risk";
 
 function getRiskVariant(risk: RiskLevel) {
   if (risk === "Urgent" || risk === "Severe") return "urgent";
@@ -24,17 +25,9 @@ function getRiskVariant(risk: RiskLevel) {
   return "success";
 }
 
-function getRiskColor(risk: RiskLevel, colors: ReturnType<typeof useColors>) {
-  if (risk === "Urgent" || risk === "Severe") return colors.destructive;
-  if (risk === "Moderate") return colors.warning;
-  if (risk === "Mild") return colors.accent;
-  return colors.success;
-}
-
 export default function ScreeningDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { screenings, getPatient, getConsultationForScreening, addConsultation, updateScreening, currentUser } = useApp();
 
   const screening = screenings.find((s) => s.id === id);
@@ -43,8 +36,7 @@ export default function ScreeningDetailScreen() {
   const [referralNotes, setReferralNotes] = useState("");
   const [showReferralForm, setShowReferralForm] = useState(false);
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   if (!screening) {
     return (
@@ -109,11 +101,7 @@ export default function ScreeningDetailScreen() {
           activeOpacity={0.8}
         >
           <View style={styles.row}>
-            <View style={[styles.avatar, { backgroundColor: colors.primary + "18" }]}>
-              <Text style={[styles.avatarText, { color: colors.primary }]}>
-                {patient.firstName[0]}{patient.lastName[0]}
-              </Text>
-            </View>
+            <Avatar firstName={patient.firstName} lastName={patient.lastName} size={44} fontSize={16} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.patientName, { color: colors.foreground }]}>
                 {patient.firstName} {patient.lastName}
@@ -262,8 +250,6 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 10 },
   cardLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 16, fontWeight: "700" },
   patientName: { fontSize: 15, fontWeight: "600" },
   patientMeta: { fontSize: 12 },
   findingRow: { flexDirection: "row", alignItems: "center", gap: 10 },

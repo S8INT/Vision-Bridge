@@ -23,22 +23,17 @@ import {
   referralsTable, appointmentsTable, campaignsTable, notificationsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
-import { findUserById } from "../lib/authStore.js";
-import { sendExpoPush } from "../lib/push.js";
+import { handleServerError, requireAuthContext, requireDb } from "../lib/http.js";
+import { notifyDoctorOfAssignment, notifyUserInBackground } from "../lib/notify.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
 
-function requireDb(res: Response): boolean {
-  if (!db) { res.status(503).json({ error: "Database unavailable" }); return false; }
-  return true;
-}
-
 // ── Bootstrap: load everything for the current tenant in one round-trip ─────
 router.get("/bootstrap", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
-  if (!requireDb(res)) return;
-  const tid = req.auth.tenantId;
+  const auth = requireAuthContext(req, res);
+  if (!auth || !requireDb(res)) return;
+  const tid = auth.tenantId;
   try {
     const [doctors, patients, screenings, consultations, referrals, appointments, campaigns, notifications] = await Promise.all([
       db!.select().from(doctorsTable).where(eq(doctorsTable.tenantId, tid)),
@@ -52,8 +47,7 @@ router.get("/bootstrap", async (req: Request, res: Response) => {
     ]);
     res.json({ doctors, patients, screenings, consultations, referrals, appointments, campaigns, notifications });
   } catch (err) {
-    console.error("[clinical] bootstrap failed:", err);
-    res.status(500).json({ error: "Failed to load clinical data" });
+    handleServerError(res, "clinical", err, "Failed to load clinical data");
   }
 });
 
@@ -96,11 +90,11 @@ function makePatchRoute(table: any) {
 
 // ── Patient's own consultations (cross-tenant safe, by userId → patient) ────────
 router.get("/my-consultations", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
-  if (!requireDb(res)) return;
+  const auth = requireAuthContext(req, res);
+  if (!auth || !requireDb(res)) return;
   try {
     const patientRows = await db!.select().from(patientsTable)
-      .where(eq(patientsTable.userId, req.auth.sub))
+      .where(eq(patientsTable.userId, auth.sub))
       .limit(1);
     const patient = patientRows[0];
     if (!patient) { res.json({ items: [] }); return; }
@@ -109,33 +103,31 @@ router.get("/my-consultations", async (req: Request, res: Response) => {
       .where(eq(consultationsTable.patientId, patient.id));
     res.json({ items: rows });
   } catch (err) {
-    console.error("[clinical] my-consultations failed:", err);
-    res.status(500).json({ error: "Failed to load your consultations" });
+    handleServerError(res, "clinical", err, "Failed to load your consultations");
   }
 });
 
 // ── Ophthalmologists: all available doctors across all tenants (patient-facing) ──
 router.get("/ophthalmologists", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
-  if (!requireDb(res)) return;
+  const auth = requireAuthContext(req, res);
+  if (!auth || !requireDb(res)) return;
   try {
     const rows = await db!.select().from(doctorsTable).where(eq(doctorsTable.isAvailable, true));
     res.json({ items: rows });
   } catch (err) {
-    console.error("[clinical] ophthalmologists failed:", err);
-    res.status(500).json({ error: "Failed to load available doctors" });
+    handleServerError(res, "clinical", err, "Failed to load available doctors");
   }
 });
 
 // ── Patient-initiated consultation (safe for patients not linked to any clinic) ──
 router.post("/patient-consult", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
-  if (!requireDb(res)) return;
+  const auth = requireAuthContext(req, res);
+  if (!auth || !requireDb(res)) return;
 
   try {
     // Verify the patient profile belongs to this user
     const patientRows = await db!.select().from(patientsTable)
-      .where(eq(patientsTable.userId, req.auth.sub))
+      .where(eq(patientsTable.userId, auth.sub))
       .limit(1);
 
     const patient = patientRows[0];
@@ -161,7 +153,7 @@ router.post("/patient-consult", async (req: Request, res: Response) => {
     const values = {
       tenantId: patient.tenantId,
       patientId: patient.id,
-      requestedBy: req.auth.sub,
+      requestedBy: auth.sub,
       requestedAt: new Date(),
       status: "Pending" as const,
       priority: req.body.priority ?? "Routine",
@@ -201,37 +193,16 @@ router.post("/patient-consult", async (req: Request, res: Response) => {
 
     res.status(201).json({ item: consultation, assignedDoctor: assignedDoctor ?? null });
 
-    // ── Push the assigned doctor (best-effort, non-blocking) ──────────────────
     if (assignedDoctor?.userId) {
-      (async () => {
-        try {
-          const doctorUser = findUserById(assignedDoctor.userId!);
-          if (!doctorUser?.pushToken) return;
-
-          const patientName = `${patient.firstName} ${patient.lastName}`.trim();
-          const priority = req.body.priority ?? "Routine";
-
-          await sendExpoPush({
-            token: doctorUser.pushToken,
-            title: "New Consultation Assigned",
-            body: `${patientName} · ${priority} priority. Tap to review their case.`,
-            data: { consultationId: consultation.id, screen: "consultations" },
-          });
-
-          await db!.insert(notificationsTable).values({
-            tenantId: assignedDoctor.tenantId,
-            type: "ConsultationUpdate",
-            title: "New Consultation Assigned",
-            body: `${patientName} · ${priority} priority consultation has been assigned to you.`,
-            read: false,
-            createdAt: new Date(),
-            patientId: patient.id,
-            consultationId: consultation.id,
-          });
-        } catch (notifErr) {
-          console.error("[clinical] doctor push failed (non-fatal):", notifErr);
-        }
-      })();
+      notifyDoctorOfAssignment({
+        scope: "clinical",
+        doctorUserId: assignedDoctor.userId,
+        tenantId: assignedDoctor.tenantId,
+        patientName: `${patient.firstName} ${patient.lastName}`.trim(),
+        priority: req.body.priority ?? "Routine",
+        consultationId: consultation.id,
+        patientId: patient.id,
+      });
     }
   } catch (err) {
     console.error("[clinical] patient-consult failed:", err);
@@ -272,33 +243,19 @@ router.patch("/consultations/:id", async (req: Request, res: Response) => {
           const doctor = doctorRows[0];
           if (!doctor?.userId) return;
 
-          const doctorUser = findUserById(doctor.userId);
-          if (!doctorUser?.pushToken) return;
-
           const patientRows = await db!.select().from(patientsTable)
             .where(eq(patientsTable.id, row.patientId))
             .limit(1);
           const patient = patientRows[0];
-          const patientName = patient
-            ? `${patient.firstName} ${patient.lastName}`.trim()
-            : "A patient";
 
-          await sendExpoPush({
-            token: doctorUser.pushToken,
-            title: "New Consultation Assigned",
-            body: `${patientName} · ${row.priority} priority. Tap to review their case.`,
-            data: { consultationId: row.id, screen: "consultations" },
-          });
-
-          await db!.insert(notificationsTable).values({
+          notifyDoctorOfAssignment({
+            scope: "clinical",
+            doctorUserId: doctor.userId,
             tenantId: row.tenantId,
-            type: "ConsultationUpdate",
-            title: "New Consultation Assigned",
-            body: `${patientName} · ${row.priority} priority consultation has been assigned to you.`,
-            read: false,
-            createdAt: new Date(),
-            patientId: row.patientId,
+            patientName: patient ? `${patient.firstName} ${patient.lastName}`.trim() : "A patient",
+            priority: row.priority,
             consultationId: row.id,
+            patientId: row.patientId,
           });
         } catch (notifErr) {
           console.error("[clinical] doctor assignment push failed (non-fatal):", notifErr);
@@ -321,9 +278,6 @@ router.patch("/consultations/:id", async (req: Request, res: Response) => {
           const patient = patientRows[0];
           if (!patient?.userId) return;
 
-          const user = findUserById(patient.userId);
-          if (!user?.pushToken) return;
-
           let title = "Consultation Update";
           let body = "Your consultation status has been updated.";
 
@@ -338,21 +292,12 @@ router.patch("/consultations/:id", async (req: Request, res: Response) => {
             body = "Your consultation is now complete. Tap to view the outcome.";
           }
 
-          await sendExpoPush({
-            token: user.pushToken,
+          notifyUserInBackground("clinical", {
+            recipientUserId: patient.userId,
+            tenantId: row.tenantId,
             title,
             body,
             data: { consultationId: row.id, screen: "my-consultations" },
-          });
-
-          // Also create an in-app notification record
-          await db!.insert(notificationsTable).values({
-            tenantId: row.tenantId,
-            type: "ConsultationUpdate",
-            title,
-            body,
-            read: false,
-            createdAt: new Date(),
             patientId: row.patientId,
             consultationId: row.id,
           });
@@ -381,10 +326,10 @@ router.post("/notifications",      makeCreateRoute(notificationsTable, () => ({ 
 router.patch("/notifications/:id", makePatchRoute(notificationsTable));
 
 router.post("/notifications/read-all", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).end(); return; }
-  if (!requireDb(res)) return;
+  const auth = requireAuthContext(req, res);
+  if (!auth || !requireDb(res)) return;
   try {
-    await db!.update(notificationsTable).set({ read: true }).where(eq(notificationsTable.tenantId, req.auth.tenantId));
+    await db!.update(notificationsTable).set({ read: true }).where(eq(notificationsTable.tenantId, auth.tenantId));
     res.json({ ok: true });
   } catch (e) { console.error(e); res.status(500).json({ error: "Failed" }); }
 });
@@ -462,8 +407,8 @@ function deriveRisk(
  * so results are reproducible across app restarts (matching real model behaviour).
  */
 router.post("/ai-analyze", async (req: Request, res: Response) => {
-  if (!req.auth) { res.status(401).json({ error: "Unauthenticated" }); return; }
-  if (!requireDb(res)) return;
+  const auth = requireAuthContext(req, res);
+  if (!auth || !requireDb(res)) return;
 
   const { patientId, imageId, qualityScore } = req.body as {
     patientId: string;
@@ -479,7 +424,7 @@ router.post("/ai-analyze", async (req: Request, res: Response) => {
   try {
     // Fetch patient medical history from DB to drive classification
     const [patient] = await db!.select().from(patientsTable)
-      .where(and(eq(patientsTable.id, patientId), eq(patientsTable.tenantId, req.auth.tenantId)));
+      .where(and(eq(patientsTable.id, patientId), eq(patientsTable.tenantId, auth.tenantId)));
 
     const medicalHistory: string[] = Array.isArray(patient?.medicalHistory)
       ? (patient.medicalHistory as string[])

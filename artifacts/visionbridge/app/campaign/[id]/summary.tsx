@@ -19,26 +19,10 @@ import { useApp, RiskLevel, Screening } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/Badge";
 import { buildSessionReportHtml, buildSessionReportText } from "@/services/reportGenerator";
+import { progressPercent } from "@/utils/campaign";
+import { getRiskColor, getRiskVariant } from "@/utils/risk";
 
 const RISK_ORDER: RiskLevel[] = ["Normal", "Mild", "Moderate", "Severe", "Urgent"];
-
-function getRiskVariant(r: RiskLevel) {
-  if (r === "Urgent" || r === "Severe") return "urgent";
-  if (r === "Moderate") return "warning";
-  if (r === "Mild") return "mild";
-  return "success";
-}
-
-function getRiskColor(r: RiskLevel, colors: ReturnType<typeof useColors>) {
-  if (r === "Urgent" || r === "Severe") return colors.destructive;
-  if (r === "Moderate") return colors.warning;
-  if (r === "Mild") return colors.accent;
-  return colors.success;
-}
-
-function progressPercent(screened: number, target: number) {
-  return target > 0 ? Math.min(100, Math.round((screened / target) * 100)) : 0;
-}
 
 export default function SessionSummaryScreen() {
   const { id: campaignId } = useLocalSearchParams<{ id: string }>();

@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +10,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useResponsive } from "@/hooks/useResponsive";
 
 interface Article {
@@ -163,8 +163,7 @@ export default function EducationScreen() {
     ? ARTICLES
     : ARTICLES.filter((a) => a.category === selectedCategory);
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : insets.top + 8;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding({ nativeTopInset: true });
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },

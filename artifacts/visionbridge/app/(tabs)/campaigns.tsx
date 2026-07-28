@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,27 +8,17 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, Campaign, CampaignStatus, CampaignType } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
+import { getCampaignVariant, progressPercent } from "@/utils/campaign";
 
 function getCampaignIcon(type: CampaignType): keyof typeof Feather.glyphMap {
   if (type === "School") return "users";
   if (type === "DiabetesClinic") return "activity";
   if (type === "MobileUnit") return "truck";
   return "map-pin";
-}
-
-function getCampaignVariant(status: CampaignStatus) {
-  if (status === "Active") return "success";
-  if (status === "Completed") return "referral";
-  if (status === "Cancelled") return "urgent";
-  return "muted";
-}
-
-function progressPercent(screened: number, target: number) {
-  return target > 0 ? Math.min(100, Math.round((screened / target) * 100)) : 0;
 }
 
 function CampaignCard({ campaign }: { campaign: Campaign }) {
@@ -92,11 +81,10 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
 
 export default function CampaignsScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { campaigns } = useApp();
   const [filter, setFilter] = useState<CampaignStatus | "All">("All");
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
+  const { topPad } = useScreenPadding();
 
   const filtered = filter === "All" ? campaigns : campaigns.filter((c) => c.status === filter);
   const active = campaigns.filter((c) => c.status === "Active").length;

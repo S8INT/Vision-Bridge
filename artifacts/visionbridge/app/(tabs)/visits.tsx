@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import {
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,32 +8,18 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useApp, type Appointment } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/Badge";
-
-function statusVariant(s: Appointment["status"]) {
-  switch (s) {
-    case "Confirmed": return "success";
-    case "Requested": return "warning";
-    case "Completed": return "muted";
-    case "Cancelled": return "muted";
-    case "NoShow":    return "urgent";
-    default: return "muted";
-  }
-}
-
-function fmtFullDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-UG", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-}
+import { fmtFullDate, fmtMonth } from "@/utils/date";
+import { getAppointmentStatusVariant } from "@/utils/status";
 
 export default function VisitsScreen() {
   const colors = useColors();
   const r = useResponsive();
-  const insets = useSafeAreaInsets();
   const { patients, appointments } = useApp();
   const { user } = useAuth();
 
@@ -60,8 +45,7 @@ export default function VisitsScreen() {
     return { upcoming, past };
   }, [appointments, myPatient]);
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : insets.top + 8;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding({ nativeTopInset: true });
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -147,7 +131,7 @@ export default function VisitsScreen() {
             >
               <View style={styles.cardHeader}>
                 <View style={styles.dateChip}>
-                  <Text style={styles.dateMonth}>{dt.toLocaleDateString("en-UG", { month: "short" })}</Text>
+                  <Text style={styles.dateMonth}>{fmtMonth(dt)}</Text>
                   <Text style={styles.dateDay}>{dt.getDate()}</Text>
                 </View>
                 <View style={styles.cardBody}>
@@ -156,7 +140,7 @@ export default function VisitsScreen() {
                   {a.doctor && <Text style={styles.meta}>{a.doctor}</Text>}
                   <Text style={styles.meta}>{fmtFullDate(a.scheduledDate)} · {a.scheduledTime}</Text>
                 </View>
-                <Badge label={a.status} variant={statusVariant(a.status) as never} />
+                <Badge label={a.status} variant={getAppointmentStatusVariant(a.status) as never} />
               </View>
               {a.notes ? <Text style={styles.notes}>{a.notes}</Text> : null}
               {a.costUGX != null && (
@@ -183,7 +167,7 @@ export default function VisitsScreen() {
               >
                 <View style={styles.cardHeader}>
                   <View style={styles.dateChip}>
-                    <Text style={styles.dateMonth}>{dt.toLocaleDateString("en-UG", { month: "short" })}</Text>
+                    <Text style={styles.dateMonth}>{fmtMonth(dt)}</Text>
                     <Text style={styles.dateDay}>{dt.getDate()}</Text>
                   </View>
                   <View style={styles.cardBody}>
@@ -192,7 +176,7 @@ export default function VisitsScreen() {
                     {a.doctor && <Text style={styles.meta}>{a.doctor}</Text>}
                     <Text style={styles.meta}>{fmtFullDate(a.scheduledDate)} · {a.scheduledTime}</Text>
                   </View>
-                  <Badge label={a.status} variant={statusVariant(a.status) as never} />
+                  <Badge label={a.status} variant={getAppointmentStatusVariant(a.status) as never} />
                 </View>
               </TouchableOpacity>
             );

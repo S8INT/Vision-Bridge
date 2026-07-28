@@ -1,7 +1,6 @@
 import React from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,12 +9,13 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { ScreeningCard } from "@/components/ScreeningCard";
+import { fmtLongDate } from "@/utils/date";
 
 function getAge(dob: string) {
   const birth = new Date(dob);
@@ -35,14 +35,12 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 export default function PatientDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const { getPatient, getScreeningsForPatient } = useApp();
 
   const patient = getPatient(id);
   const screenings = getScreeningsForPatient(id);
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : 0;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding();
 
   if (!patient) {
     return (
@@ -92,7 +90,7 @@ export default function PatientDetailScreen() {
         <InfoRow label="District" value={patient.district} />
         <InfoRow
           label="Registered"
-          value={new Date(patient.registeredAt).toLocaleDateString("en-UG", { year: "numeric", month: "long", day: "numeric" })}
+          value={fmtLongDate(patient.registeredAt)}
         />
         {patient.registeredByName ? (
           <InfoRow label="Registered By" value={patient.registeredByName} />
@@ -100,7 +98,7 @@ export default function PatientDetailScreen() {
         {patient.lastVisit ? (
           <InfoRow
             label="Last Visit"
-            value={new Date(patient.lastVisit).toLocaleDateString("en-UG", { year: "numeric", month: "long", day: "numeric" })}
+            value={fmtLongDate(patient.lastVisit)}
           />
         ) : null}
       </View>

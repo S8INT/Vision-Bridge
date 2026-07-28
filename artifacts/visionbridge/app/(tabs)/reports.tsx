@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import {
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,16 +8,13 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/Badge";
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-UG", { month: "short", day: "numeric", year: "numeric" });
-}
+import { fmtDate } from "@/utils/date";
 
 const RISK_COLOR: Record<string, string> = {
   Normal: "#10b981", Mild: "#84cc16", Moderate: "#f59e0b", Severe: "#ef4444", Urgent: "#dc2626",
@@ -27,7 +23,6 @@ const RISK_COLOR: Record<string, string> = {
 export default function ReportsScreen() {
   const colors = useColors();
   const r = useResponsive();
-  const insets = useSafeAreaInsets();
   const { patients, screenings, consultations } = useApp();
   const { user } = useAuth();
 
@@ -52,8 +47,7 @@ export default function ReportsScreen() {
       .sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime());
   }, [screenings, myPatient]);
 
-  const topPad = Platform.OS === "web" ? insets.top + 67 : insets.top + 8;
-  const botPad = Platform.OS === "web" ? 34 : 0;
+  const { topPad, botPad } = useScreenPadding({ nativeTopInset: true });
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
