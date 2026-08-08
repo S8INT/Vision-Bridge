@@ -87,6 +87,7 @@ const users = new Map<string, StoredUser>();
 const sessionsByToken = new Map<string, StoredSession>();
 const sessionsByUser = new Map<string, Set<string>>();
 const auditLog: AuditEntry[] = [];
+const pendingUserWrites = new Map<string, Promise<unknown>>();
 
 let dbAvailable = true;
 let initPromise: Promise<void> | null = null;
@@ -321,7 +322,7 @@ export function addUser(user: StoredUser): void {
   if (!sessionsByUser.has(user.id)) sessionsByUser.set(user.id, new Set());
 
   if (dbAvailable) {
-    fireAndForget("addUser", db.insert(usersTable).values({
+    const persistence = db.insert(usersTable).values({
       id: user.id,
       tenantId: user.tenantId,
       email: user.email,
@@ -340,8 +341,21 @@ export function addUser(user: StoredUser): void {
       pushToken: user.pushToken,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
-    }));
+    });
+    pendingUserWrites.set(user.id, persistence);
+    fireAndForget("addUser", persistence.finally(() => pendingUserWrites.delete(user.id)));
   }
+}
+
+/**
+ * A newly registered user is returned to the client immediately, while the
+ * write-through cache persists the user in the background. Patient profile
+ * creation has a foreign-key dependency on that row, so callers that need to
+ * create related records can wait for this specific write.
+ */
+export async function waitForUserPersistence(userId: string): Promise<void> {
+  const pending = pendingUserWrites.get(userId);
+  if (pending) await pending;
 }
 
 // ── Session Operations ────────────────────────────────────────────────────────

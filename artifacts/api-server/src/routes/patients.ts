@@ -15,7 +15,7 @@ import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { db, patientsTable, type Patient } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
-import { findUserById } from "../lib/authStore.js";
+import { findUserById, waitForUserPersistence } from "../lib/authStore.js";
 import { audit } from "../lib/audit.js";
 import {
   allowRoles,
@@ -69,7 +69,20 @@ router.get("/me", async (req: Request, res: Response) => {
 
   try {
     const patient = await findMyPatient(auth.sub);
-    if (!patient) { res.status(404).json({ error: "No patient profile yet", code: "NO_PROFILE" }); return; }
+    if (!patient) {
+      const user = findUserById(auth.sub);
+      res.status(404).json({
+        error: "No patient profile yet",
+        code: "NO_PROFILE",
+        defaults: user ? {
+          firstName: user.fullName.trim().split(/\s+/)[0] ?? "",
+          lastName: user.fullName.trim().split(/\s+/).slice(1).join(" "),
+          phone: user.phone ?? null,
+          district: user.district || null,
+        } : null,
+      });
+      return;
+    }
     res.json({ patient });
   } catch (err) {
     handleServerError(res, "patients", err, "Failed to load profile");
@@ -87,9 +100,20 @@ router.post("/me", async (req: Request, res: Response) => {
   if (!data) return;
 
   try {
+    // Registration issues tokens before the write-through user insert finishes.
+    // Wait here so the patients.user_id foreign key is always valid.
+    await waitForUserPersistence(auth.sub);
+
     const existing = await findMyPatient(auth.sub);
     if (existing) {
-      res.status(409).json({ error: "Profile already exists", patient: existing });
+      // Treat a repeated create as an idempotent save. This makes a retry
+      // after a timeout safe and avoids losing the user's form data.
+      const [updated] = await db!
+        .update(patientsTable)
+        .set({ ...definedFields(data), updatedAt: new Date() })
+        .where(eq(patientsTable.id, existing.id))
+        .returning();
+      res.json({ patient: updated });
       return;
     }
 

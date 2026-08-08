@@ -61,16 +61,21 @@ interface PatientRecord {
   registeredAt: string;
 }
 
+function splitFullName(fullName: string | undefined): { first: string; last: string } {
+  const parts = (fullName ?? "").trim().split(/\s+/).filter(Boolean);
+  return {
+    first: parts[0] ?? "",
+    last: parts.slice(1).join(" "),
+  };
+}
+
 export default function PatientProfileScreen() {
   const colors = useColors();
   const r = useResponsive();
   const insets = useSafeAreaInsets();
   const { user, accessToken } = useAuth();
 
-  const initialNames = useMemo(() => {
-    const parts = (user?.fullName ?? "").trim().split(/\s+/);
-    return { first: parts[0] ?? "", last: parts.slice(1).join(" ") };
-  }, [user]);
+  const initialNames = useMemo(() => splitFullName(user?.fullName), [user?.fullName]);
 
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
@@ -100,11 +105,15 @@ export default function PatientProfileScreen() {
 
         if (res.status === 404) {
           // No profile yet → start in create mode
+          const data = await res.json().catch(() => ({})) as {
+            defaults?: { firstName?: string; lastName?: string; phone?: string | null; district?: string | null } | null;
+          };
+          const defaults = data.defaults;
           setIsNew(true);
-          setFirstName(initialNames.first);
-          setLastName(initialNames.last);
-          setPhone(user?.phone ?? "");
-          setDistrict(user?.district ?? "");
+          setFirstName(defaults?.firstName || initialNames.first);
+          setLastName(defaults?.lastName || initialNames.last);
+          setPhone(defaults?.phone ?? user?.phone ?? "");
+          setDistrict(defaults?.district ?? user?.district ?? "");
         } else if (res.ok) {
           const data = await res.json() as { patient: PatientRecord };
           setProfile(data.patient);
