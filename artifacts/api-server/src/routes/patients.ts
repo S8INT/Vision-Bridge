@@ -51,6 +51,19 @@ function generateMrn(): string {
   return `VB-${stamp}-${rand}`;
 }
 
+async function ensureUniqueMrn(): Promise<string> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const candidate = generateMrn();
+    const [existing] = await db!
+      .select({ id: patientsTable.id })
+      .from(patientsTable)
+      .where(eq(patientsTable.patientId, candidate))
+      .limit(1);
+    if (!existing) return candidate;
+  }
+  throw new Error("Could not generate a unique patient ID");
+}
+
 /** Drops keys explicitly set to `undefined` so partial updates skip them. */
 function definedFields<T extends Record<string, unknown>>(data: T): Partial<T> {
   return Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) as Partial<T>;
@@ -122,7 +135,7 @@ router.post("/me", async (req: Request, res: Response) => {
       .values({
         tenantId: auth.tenantId,
         userId: auth.sub,
-        patientId: generateMrn(),
+        patientId: await ensureUniqueMrn(),
         firstName: data.firstName,
         lastName: data.lastName,
         dateOfBirth: data.dateOfBirth ?? null,
@@ -202,9 +215,27 @@ router.post("/", async (req: Request, res: Response) => {
   if (!data) return;
 
   try {
+    // A freshly registered account can receive its token before the
+    // write-through users-table insert completes. Wait before using the
+    // authenticated user as registered_by.
+    await waitForUserPersistence(auth.sub);
+
     const body = req.body ?? {};
-    const patientId: string = body.patientId
-      || generateMrn();
+    const requestedPatientId = typeof body.patientId === "string"
+      ? body.patientId.trim()
+      : "";
+    const requestedIdExists = requestedPatientId
+      ? await db!.select({ id: patientsTable.id })
+        .from(patientsTable)
+        .where(eq(patientsTable.patientId, requestedPatientId))
+        .limit(1)
+      : [];
+    // The mobile client may have a stale local patient count. Preserve a
+    // requested MRN only when it is unused; otherwise issue a server-owned
+    // unique MRN instead of failing on the unique constraint.
+    const patientId = requestedPatientId && !requestedIdExists[0]
+      ? requestedPatientId
+      : await ensureUniqueMrn();
 
     // Resolve registering clinician's name
     const registeredByUser = findUserById(auth.sub);
@@ -222,7 +253,9 @@ router.post("/", async (req: Request, res: Response) => {
       district: data.district ?? null,
       medicalHistory: data.medicalHistory ?? [],
       lastVisit: body.lastVisit ? new Date(body.lastVisit) : null,
-      registeredBy: auth.sub,
+      // A stale token must not make a valid patient registration fail on the
+      // optional clinician attribution foreign key.
+      registeredBy: registeredByUser?.id ?? null,
       registeredByName,
     }).returning();
 

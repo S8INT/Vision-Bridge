@@ -373,7 +373,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       const msg = (e as Error).message ?? "";
       const isNetErr = /Network request failed|Failed to fetch|TypeError/i.test(msg);
-      if (!isNetErr) { console.warn("[addPatient]", msg); return null; }
+      if (!isNetErr) {
+        console.warn("[addPatient]", msg);
+        return null;
+      }
       // Offline — store optimistically and queue for later sync
       const tempId = `_offline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const optimistic: Patient = { ...p, id: tempId, registeredAt: new Date().toISOString() };
