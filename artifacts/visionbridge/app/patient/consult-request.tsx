@@ -188,7 +188,7 @@ export default function ConsultRequestScreen() {
         if (err.code === "NO_PROFILE") {
           setSubmitting(false);
           Alert.alert("No Patient Profile", "Please create your patient profile first.", [
-            { text: "Create Profile", onPress: () => router.push("/patient/register") },
+            { text: "Create Profile", onPress: () => router.push("/patient/profile") },
             { text: "Cancel", style: "cancel" },
           ]);
           return;
@@ -335,7 +335,7 @@ export default function ConsultRequestScreen() {
             You need to create a patient profile before requesting a consultation.
             Please register your details first.
           </Text>
-          <TouchableOpacity style={s.errorBtn} onPress={() => router.push("/patient/register")}>
+          <TouchableOpacity style={s.errorBtn} onPress={() => router.push("/patient/profile")}>
             <Text style={s.errorBtnText}>Create Patient Profile</Text>
           </TouchableOpacity>
         </View>

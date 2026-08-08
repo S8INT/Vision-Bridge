@@ -352,7 +352,7 @@ export default function MyConsultationsScreen() {
           </Text>
           <TouchableOpacity
             style={[st.emptyBtn, { backgroundColor: colors.primary }]}
-            onPress={() => router.push("/patient/register")}
+            onPress={() => router.push("/patient/profile")}
           >
             <Feather name="user-plus" size={16} color="#fff" />
             <Text style={st.emptyBtnText}>Create Patient Profile</Text>

@@ -14,6 +14,7 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, PatientSex } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import { DateInput } from "@/components/ui/DateInput";
 
 const MEDICAL_CONDITIONS = [
@@ -74,6 +75,7 @@ function InputField({
 export default function RegisterPatientScreen() {
   const colors = useColors();
   const { addPatient, patients } = useApp();
+  const { user } = useAuth();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -101,6 +103,15 @@ export default function RegisterPatientScreen() {
   }
 
   async function handleSave() {
+    if (user?.role === "Patient") {
+      Alert.alert(
+        "Complete your patient profile",
+        "Patient accounts use the self-service profile form.",
+        [{ text: "Open Profile", onPress: () => router.replace("/patient/profile") }],
+      );
+      return;
+    }
+
     if (!firstName.trim() || !lastName.trim() || !dob.trim()) {
       Alert.alert("Required Fields", "Please fill in first name, last name, and date of birth.");
       return;

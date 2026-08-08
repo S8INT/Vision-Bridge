@@ -466,10 +466,18 @@ export async function uploadRetinalImage(
 
   const contentType = response.headers.get("content-type") ?? "";
   if (response.status === 422) {
-    const body = contentType.includes("application/json")
-      ? await response.json() as { qualityScore?: ServerQualityResult; error?: string }
-      : { error: await response.text() };
-    throw new QualityCheckError(body.qualityScore, body.error);
+    if (!contentType.includes("application/json")) {
+      const text = await response.text();
+      throw new Error(`Upload failed: ${response.status} — ${text.slice(0, 300)}`);
+    }
+    const body = await response.json() as {
+      qualityScore?: ServerQualityResult;
+      error?: string;
+    };
+    if (body.qualityScore) {
+      throw new QualityCheckError(body.qualityScore, body.error ?? "Image quality check failed");
+    }
+    throw new Error(body.error ?? "Image quality check failed");
   }
 
   if (!response.ok) {
