@@ -14,7 +14,12 @@ import { Platform } from "react-native";
 import offlineQueue, { QueueItem } from "./offlineQueue";
 import { fetchWithTimeout, UPLOAD_TIMEOUT_MS } from "../lib/fetchWithTimeout";
 
-const API_BASE = process.env["EXPO_PUBLIC_API_URL"] ?? `https://${process.env["EXPO_PUBLIC_DOMAIN"]}/api-server/api`;
+const configuredApiUrl =
+  process.env["EXPO_PUBLIC_API_URL"] ??
+  `https://${process.env["EXPO_PUBLIC_DOMAIN"]}`;
+const API_BASE = configuredApiUrl.replace(/\/+$/, "").endsWith("/api")
+  ? configuredApiUrl.replace(/\/+$/, "")
+  : `${configuredApiUrl.replace(/\/+$/, "")}/api`;
 
 export interface UploadMetadata {
   patientId: string;
@@ -459,14 +464,22 @@ export async function uploadRetinalImage(
 
   onProgress?.(80);
 
+  const contentType = response.headers.get("content-type") ?? "";
   if (response.status === 422) {
-    const body = await response.json();
+    const body = contentType.includes("application/json")
+      ? await response.json() as { qualityScore?: ServerQualityResult; error?: string }
+      : { error: await response.text() };
     throw new QualityCheckError(body.qualityScore, body.error);
   }
 
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Upload failed: ${response.status} — ${text}`);
+  }
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text();
+    throw new Error(`Upload failed: server returned ${contentType || "non-JSON"} — ${text.slice(0, 300)}`);
   }
 
   const data = await response.json();
