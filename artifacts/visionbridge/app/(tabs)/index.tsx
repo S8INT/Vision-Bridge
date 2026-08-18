@@ -20,6 +20,7 @@ import { ConsultationCard } from "@/components/ConsultationCard";
 import { RoleAnalytics } from "@/components/analytics/RoleAnalytics";
 import { SyncBanner } from "@/components/SyncBanner";
 import { fmtDate } from "@/utils/date";
+import { OphthalmologistDashboard } from "@/components/doctor/OphthalmologistDashboard";
 
 // ── Role metadata displayed at top of each dashboard ─────────────────────────
 
@@ -156,6 +157,9 @@ export default function DashboardScreen() {
   const actionMinWidth = `${Math.floor(100 / Math.min(r.cols, 4)) - 2}%` as const;
 
   const role: UserRole = user?.role ?? "Viewer";
+  if (role === "Doctor") {
+    return <OphthalmologistDashboard />;
+  }
   const roleMeta = ROLE_META[role];
   const quickActions = ROLE_ACTIONS[role];
   const statDefs = ROLE_STATS[role];
@@ -690,8 +694,8 @@ export default function DashboardScreen() {
         </View>
       )}
 
-      {/* ── Active Consultations (Admin, Doctor only) ── */}
-      {(role === "Admin" || role === "Doctor") && (
+      {/* ── Active Consultations (Admin only; Doctors have the clinical workspace above) ── */}
+      {role === "Admin" && (
         <View style={{ marginTop: 8 }}>
           <SectionHeader
             title="Active Consultations"

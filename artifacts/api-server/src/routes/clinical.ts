@@ -17,7 +17,7 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray, or } from "drizzle-orm";
 import {
   db, patientsTable, doctorsTable, screeningsTable, consultationsTable,
   referralsTable, appointmentsTable, campaignsTable, notificationsTable,
@@ -35,16 +35,70 @@ router.get("/bootstrap", async (req: Request, res: Response) => {
   if (!auth || !requireDb(res)) return;
   const tid = auth.tenantId;
   try {
-    const [doctors, patients, screenings, consultations, referrals, appointments, campaigns, notifications] = await Promise.all([
-      db!.select().from(doctorsTable).where(eq(doctorsTable.tenantId, tid)),
-      db!.select().from(patientsTable).where(eq(patientsTable.tenantId, tid)),
-      db!.select().from(screeningsTable).where(eq(screeningsTable.tenantId, tid)),
-      db!.select().from(consultationsTable).where(eq(consultationsTable.tenantId, tid)),
-      db!.select().from(referralsTable).where(eq(referralsTable.tenantId, tid)),
-      db!.select().from(appointmentsTable).where(eq(appointmentsTable.tenantId, tid)),
-      db!.select().from(campaignsTable).where(eq(campaignsTable.tenantId, tid)),
-      db!.select().from(notificationsTable).where(eq(notificationsTable.tenantId, tid)),
-    ]);
+    const doctors = await db!.select().from(doctorsTable).where(eq(doctorsTable.tenantId, tid));
+    let patients;
+    let screenings;
+    let consultations;
+    let referrals;
+    let appointments;
+    let campaigns: Array<typeof campaignsTable.$inferSelect>;
+    let notifications;
+
+    if (auth.role === "Doctor") {
+      // Doctors receive only their assigned queue and records linked to those
+      // patients. The client can render a useful workspace without receiving
+      // the entire tenant roster.
+      const ownDoctorIds = doctors.filter((doctor) => doctor.userId === auth.sub).map((doctor) => doctor.id);
+      const assigned = ownDoctorIds.length > 0
+        ? await db!.select().from(consultationsTable).where(
+          and(eq(consultationsTable.tenantId, tid), inArray(consultationsTable.assignedDoctorId, ownDoctorIds)),
+        )
+        : [];
+      const assignedPatientIds = assigned.map((item) => item.patientId);
+      const relatedPatientIds = assignedPatientIds.length > 0
+        ? assignedPatientIds
+        : [];
+
+      patients = relatedPatientIds.length > 0
+        ? await db!.select().from(patientsTable).where(
+          and(eq(patientsTable.tenantId, tid), inArray(patientsTable.id, relatedPatientIds)),
+        )
+        : [];
+      screenings = relatedPatientIds.length > 0
+        ? await db!.select().from(screeningsTable).where(
+          and(eq(screeningsTable.tenantId, tid), inArray(screeningsTable.patientId, relatedPatientIds)),
+        )
+        : [];
+      consultations = assigned;
+      referrals = relatedPatientIds.length > 0
+        ? await db!.select().from(referralsTable).where(
+          and(eq(referralsTable.tenantId, tid), inArray(referralsTable.patientId, relatedPatientIds)),
+        )
+        : [];
+      appointments = relatedPatientIds.length > 0
+        ? await db!.select().from(appointmentsTable).where(
+          and(eq(appointmentsTable.tenantId, tid), inArray(appointmentsTable.patientId, relatedPatientIds)),
+        )
+        : [];
+      campaigns = [];
+      notifications = await db!.select().from(notificationsTable).where(
+        and(eq(notificationsTable.tenantId, tid), or(eq(notificationsTable.userId, auth.sub), ...(
+          relatedPatientIds.length > 0
+            ? [inArray(notificationsTable.patientId, relatedPatientIds)]
+            : []
+        ))),
+      );
+    } else {
+      [patients, screenings, consultations, referrals, appointments, campaigns, notifications] = await Promise.all([
+        db!.select().from(patientsTable).where(eq(patientsTable.tenantId, tid)),
+        db!.select().from(screeningsTable).where(eq(screeningsTable.tenantId, tid)),
+        db!.select().from(consultationsTable).where(eq(consultationsTable.tenantId, tid)),
+        db!.select().from(referralsTable).where(eq(referralsTable.tenantId, tid)),
+        db!.select().from(appointmentsTable).where(eq(appointmentsTable.tenantId, tid)),
+        db!.select().from(campaignsTable).where(eq(campaignsTable.tenantId, tid)),
+        db!.select().from(notificationsTable).where(eq(notificationsTable.tenantId, tid)),
+      ]);
+    }
     res.json({ doctors, patients, screenings, consultations, referrals, appointments, campaigns, notifications });
   } catch (err) {
     handleServerError(res, "clinical", err, "Failed to load clinical data");

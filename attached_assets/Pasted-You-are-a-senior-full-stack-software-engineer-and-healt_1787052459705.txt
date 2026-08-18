@@ -1,0 +1,1118 @@
+You are a **senior full-stack software engineer and healthtech architect** building a production-oriented teleophthalmology. Your task is to design and implement the dashboard as a polished, clinically realistic, responsive application rather than a generic admin dashboard.
+
+## 1. Product Objective
+
+Build an ophthalmologist-facing workspace that allows a clinician to:
+
+* Quickly understand which patients need attention.
+* Triage and prioritize referrals.
+* Review patient histories.
+* Review retinal/fundus images and investigations.
+* Review AI-assisted findings.
+* Manage their active patient caseload.
+* Collaborate with other ophthalmologists through referrals and second opinions.
+* Manage follow-ups.
+* Track patients who are overdue or lost to follow-up.
+* Maintain privacy through role-based and relationship-based access control.
+* Work effectively in a low-bandwidth environment.
+
+The central UX principle is:
+
+> **Show the ophthalmologist the patients who need attention first, then provide everything required to make a safe clinical decision.**
+
+Do not build a generic CRM-style dashboard.
+
+---
+
+# 2. Core Dashboard Structure
+
+Create the dashboard with the following major areas:
+
+### A. Global Navigation
+
+Use a persistent sidebar/navigation containing:
+
+* Dashboard
+* My Patients
+* Referrals
+* Second Opinions
+* Follow-ups
+* Clinical Inbox
+* Care Teams
+* Reports
+* Notifications
+* Profile / Settings
+
+The sidebar should clearly indicate the current page.
+
+The interface must work well on desktop and tablet.
+
+For mobile, collapse the sidebar into a drawer/bottom navigation pattern where appropriate.
+
+---
+
+# 3. Ophthalmologist Home Dashboard
+
+The main dashboard should provide an immediate clinical overview.
+
+At the top:
+
+```text
+Good morning, Dr. [Name]
+
+Tuesday, 18 Aug 2026
+```
+
+Then show priority summary cards:
+
+* Urgent
+* High Priority
+* Routine
+* Awaiting Review
+
+Each should show a count and be clickable.
+
+Example:
+
+```text
+URGENT
+3 cases
+```
+
+```text
+HIGH PRIORITY
+7 cases
+```
+
+```text
+ROUTINE
+18 cases
+```
+
+```text
+AWAITING REVIEW
+12 cases
+```
+
+Do not overuse cards. Keep the visual hierarchy clean.
+
+---
+
+# 4. Clinical Work Queue
+
+Create a prominent section called:
+
+## My Clinical Queue
+
+Display cases that require action.
+
+Suggested categories:
+
+### New Referrals
+
+Patients referred to the ophthalmologist who have not yet been reviewed.
+
+### AI Flagged Cases
+
+Patients whose screening results were flagged by the AI system.
+
+### Second Opinion Requests
+
+Cases requested by another ophthalmologist.
+
+### Follow-ups Due
+
+Patients requiring reassessment.
+
+### Awaiting Investigations
+
+Patients whose examination is incomplete.
+
+### Lost to Follow-up
+
+Patients who have missed scheduled appointments.
+
+Each queue item should show:
+
+* Patient name
+* Patient ID
+* Age
+* Sex
+* Referral source/facility
+* Primary clinical concern
+* Priority
+* Date received
+* Current status
+* Assigned clinician
+* Action button
+
+Use meaningful clinical statuses rather than generic "Open/Closed".
+
+Examples:
+
+* Awaiting Review
+* Under Review
+* Investigation Required
+* Second Opinion Requested
+* Treatment Planned
+* Follow-up Scheduled
+* Referred
+* Closed
+
+---
+
+# 5. Patient Priority System
+
+Implement a visual clinical priority system:
+
+### Red
+
+Urgent
+
+### Orange
+
+High priority
+
+### Yellow
+
+Routine / moderate
+
+### Green
+
+Stable / reviewed
+
+Do not rely on color alone.
+
+Always include:
+
+* text label
+* icon
+* accessible semantic meaning
+
+The UI must remain usable for users with color-vision deficiencies.
+
+---
+
+# 6. Patient Search
+
+Add a global patient search.
+
+Allow searching by:
+
+* Patient name
+* Patient ID
+* Phone number
+* National/clinic ID where appropriate
+* Referral ID
+
+Search results should display:
+
+* Patient
+* Current care team
+* Current status
+* Most recent visit
+* Primary diagnosis/clinical concern
+
+Important:
+
+**Do not allow unrestricted visibility of every patient in the system.**
+
+Search results must be filtered according to the authenticated user's permissions and care relationship.
+
+---
+
+# 7. Patient Detail Workspace
+
+When an ophthalmologist opens a patient, create a dedicated patient workspace.
+
+Patient header should contain:
+
+```text
+Sarah Namukasa
+Patient ID: UGA-004821
+34 years | Female
+
+Status: Awaiting Specialist Review
+Priority: High
+Primary Ophthalmologist: Dr. X
+```
+
+Include actions:
+
+* Start Review
+* Refer
+* Request Second Opinion
+* Add Note
+* Schedule Follow-up
+* View Timeline
+
+The patient page should contain tabs:
+
+### Overview
+
+### Clinical History
+
+### Images
+
+### Investigations
+
+### AI Analysis
+
+### Diagnoses
+
+### Treatment
+
+### Referrals
+
+### Notes
+
+### Timeline
+
+Avoid loading everything at once if that creates a heavy page.
+
+Use lazy loading where appropriate.
+
+---
+
+# 8. Patient Overview
+
+Create a clinical summary panel showing:
+
+### Visual Acuity
+
+OD
+OS
+
+### Intraocular Pressure
+
+OD
+OS
+
+### Relevant Medical History
+
+For example:
+
+* Diabetes
+* Hypertension
+* Previous ocular surgery
+
+### Current Clinical Concern
+
+Example:
+
+> Suspected diabetic retinopathy
+
+### Current Diagnosis
+
+Example:
+
+> Moderate NPDR
+
+### Last Examination
+
+### Next Follow-up
+
+### Current Care Team
+
+Keep this area highly scannable.
+
+---
+
+# 9. Clinical Timeline
+
+Implement a longitudinal timeline.
+
+Example:
+
+```text
+18 Aug 2026
+Fundus images uploaded
+
+18 Aug 2026
+AI screening completed
+
+19 Aug 2026
+Ophthalmologist reviewed case
+
+19 Aug 2026
+Diagnosis confirmed
+
+19 Aug 2026
+Treatment plan created
+
+20 Nov 2026
+Follow-up reminder scheduled
+```
+
+Every important clinical or administrative action should produce a timeline event.
+
+Include:
+
+* timestamp
+* actor
+* event type
+* description
+
+Examples:
+
+* Image uploaded
+* AI analysis completed
+* Diagnosis changed
+* Referral created
+* Second opinion requested
+* Note added
+* Follow-up scheduled
+* Patient contacted
+* Access granted/revoked
+
+---
+
+# 10. Ophthalmic Image Review
+
+This is a core capability.
+
+Build an image-review interface that can display:
+
+* Fundus photographs
+* OCT images
+* Other ophthalmic imaging where supported
+
+Support:
+
+* zoom
+* pan
+* fullscreen
+* brightness/contrast adjustment where technically appropriate
+* image metadata
+* image quality indicator
+* annotations
+
+Allow comparison:
+
+```text
+OD Current     OD Previous
+OS Current     OS Previous
+```
+
+Also support:
+
+```text
+Current vs Previous
+Right vs Left
+```
+
+The image viewer should be optimized for clinical use.
+
+Avoid unnecessary animations.
+
+---
+
+# 11. AI Analysis Panel
+
+Create a dedicated AI Analysis section.
+
+Example:
+
+```text
+AI SCREENING RESULT
+
+Possible diabetic retinopathy
+Confidence: 91%
+
+Possible findings:
+• Microaneurysms
+• Retinal hemorrhages
+• Possible macular involvement
+
+Image quality:
+GOOD
+```
+
+Include a clear disclaimer:
+
+> AI findings are clinical decision support and do not represent the final diagnosis.
+
+The ophthalmologist must be able to:
+
+* Accept AI suggestion
+* Modify AI suggestion
+* Reject AI suggestion
+* Add their own clinical interpretation
+
+The final diagnosis must always belong to the clinician.
+
+---
+
+# 12. Clinical Decision Workflow
+
+Provide a simple workflow:
+
+```text
+Review Case
+      ↓
+Review History
+      ↓
+Review Images
+      ↓
+Review AI Findings
+      ↓
+Clinical Assessment
+      ↓
+Diagnosis
+      ↓
+Treatment / Management
+      ↓
+Follow-up / Referral
+```
+
+At the end of the review, the ophthalmologist should be able to:
+
+* Save assessment
+* Add diagnosis
+* Add management plan
+* Request investigation
+* Schedule follow-up
+* Refer patient
+* Request second opinion
+
+---
+
+# 13. Referral Workflow
+
+Implement a referral system.
+
+An ophthalmologist should be able to create:
+
+### Referral
+
+Fields:
+
+* Destination facility
+* Specialist
+* Referral reason
+* Clinical summary
+* Urgency
+* Relevant images
+* Relevant investigations
+* Additional notes
+
+Referral states:
+
+* Draft
+* Submitted
+* Accepted
+* In Review
+* Completed
+* Rejected
+* Cancelled
+
+Display referral history inside the patient record.
+
+---
+
+# 14. Second Opinion Workflow
+
+This is especially important.
+
+Allow an ophthalmologist to select:
+
+> Request Second Opinion
+
+Then choose another ophthalmologist.
+
+The requester should provide:
+
+* Clinical question
+* Relevant history
+* Images
+* Investigations
+* Current assessment
+
+The consultant receives a case in:
+
+## Second Opinion Inbox
+
+They can:
+
+* Review the case
+* Add comments
+* Provide an opinion
+* Recommend further investigation
+* Recommend referral
+
+The consulting ophthalmologist should **not automatically become the patient's primary clinician**.
+
+---
+
+# 15. Care Team Model
+
+Create a concept of:
+
+## Patient Care Team
+
+Example:
+
+```text
+Primary Ophthalmologist
+Dr. Peter
+
+Nurse
+Jane
+
+Imaging Technician
+David
+
+Consulting Retina Specialist
+Dr. Sarah
+```
+
+Each care-team member should have a role.
+
+Use permission scopes.
+
+For example:
+
+### Technician
+
+Can:
+
+* upload images
+* record measurements
+* view relevant patient information
+
+Cannot:
+
+* modify final diagnosis
+
+### Nurse
+
+Can:
+
+* update measurements
+* add notes
+* manage follow-up workflow
+
+### Primary Ophthalmologist
+
+Can:
+
+* review full clinical record
+* diagnose
+* treat
+* refer
+* manage care team
+
+### Consulting Ophthalmologist
+
+Can:
+
+* view the scoped case
+* view approved images/investigations
+* add consultation notes
+
+---
+
+# 16. Access Control Model
+
+This is a healthcare application.
+
+Do not implement access purely through frontend route hiding.
+
+Implement authorization at the backend/API/data layer.
+
+Use:
+
+### Role-Based Access Control
+
+and
+
+### Relationship-Based Access Control
+
+Access should depend on:
+
+```text
+User Role
++
+Patient Relationship
++
+Care Team Membership
++
+Purpose of Access
++
+Explicit Permission
+```
+
+Examples:
+
+An ophthalmologist can see:
+
+* patients assigned to them
+* patients they referred
+* patients referred to them
+* cases where they have been explicitly added to the care team
+* second-opinion cases assigned to them
+
+They should **not** automatically see every patient in the platform.
+
+---
+
+# 17. Temporary Access
+
+Support scoped access.
+
+For example:
+
+```text
+Second Opinion Access
+
+Granted to:
+Dr. Sarah
+
+Purpose:
+Retina consultation
+
+Access:
+View images + relevant history + add consultation
+
+Expires:
+7 days
+```
+
+When access expires, access should automatically be revoked.
+
+Record this action in the audit log.
+
+---
+
+# 18. Emergency / Break-Glass Access
+
+Design the architecture to support emergency access.
+
+Example:
+
+```text
+Emergency Access Required
+
+Reason:
+Acute vision loss requiring immediate assessment.
+
+[Grant Emergency Access]
+```
+
+Emergency access must:
+
+* require justification
+* generate an audit log
+* be visible to administrators/compliance users
+* have an expiration where appropriate
+
+Do not implement silent unrestricted access.
+
+---
+
+# 19. Audit Logging
+
+Create audit events for sensitive actions.
+
+Examples:
+
+* Patient record viewed
+* Image viewed
+* Diagnosis changed
+* Note added
+* Referral created
+* Second opinion granted
+* Access granted
+* Access revoked
+* Emergency access used
+
+Store:
+
+* actor
+* patient
+* action
+* timestamp
+* source/device where practical
+* reason when required
+
+Do not expose the audit log unnecessarily to ordinary users.
+
+---
+
+# 20. Notifications
+
+Implement a notification center.
+
+Examples:
+
+* New referral
+* Urgent case
+* Second opinion request
+* Follow-up due
+* Referral accepted
+* Consultation response received
+* Patient missed appointment
+
+Notifications should support:
+
+* read/unread
+* priority
+* timestamp
+* deep link to the relevant case
+
+---
+
+# 21. Low-Resource / Uganda Requirements
+
+Design specifically for intermittent connectivity and lower bandwidth.
+
+### Frontend
+
+* Minimize unnecessary API calls.
+* Lazy-load images.
+* Compress thumbnails.
+* Load high-resolution images only when requested.
+* Cache appropriate non-sensitive UI data.
+* Provide clear loading states.
+* Gracefully handle interrupted network requests.
+
+### Clinical workflow
+
+Do not make the entire dashboard dependent on real-time connectivity.
+
+The architecture should leave room for:
+
+* offline queues
+* retry mechanisms
+* synchronization
+* upload resumption
+
+Do not attempt to solve the entire offline system in this dashboard implementation unless the existing codebase already supports it.
+
+---
+
+# 22. UX Requirements
+
+The dashboard should feel like a modern medical application.
+
+Use:
+
+* clean typography
+* restrained visual hierarchy
+* compact clinical data presentation
+* obvious primary actions
+* accessible contrast
+* meaningful icons
+* responsive layout
+
+Avoid:
+
+* excessive gradients
+* gaming-style dashboards
+* overly colorful cards
+* unnecessary charts
+* huge decorative elements
+* excessive whitespace that hides clinical information
+
+The design should resemble a serious clinical workspace rather than a startup marketing page.
+
+---
+
+# 23. Technical Requirements
+
+Before modifying the project:
+
+1. Inspect the existing Replit repository.
+2. Identify the current frontend framework.
+3. Identify routing.
+4. Identify component system/design system.
+5. Identify authentication implementation.
+6. Identify API/data layer.
+7. Identify existing patient models and endpoints.
+8. Reuse existing architecture wherever possible.
+
+**Do not unnecessarily rewrite the existing application.**
+
+Build on top of the current implementation.
+
+Use existing components and conventions when they are good.
+
+Only introduce new dependencies when there is a clear benefit.
+
+---
+
+# 24. Suggested Frontend Component Structure
+
+Adapt this to the existing project rather than blindly copying it:
+
+```text
+/dashboard
+    layout
+    sidebar
+    header
+
+    components/
+        PrioritySummary
+        ClinicalQueue
+        ReferralQueue
+        SecondOpinionQueue
+        FollowUpQueue
+        PatientSearch
+        PatientSummary
+        PatientTimeline
+        CareTeam
+        ImageViewer
+        AIAnalysis
+        ClinicalAssessment
+        ReferralDialog
+        SecondOpinionDialog
+        NotificationsPanel
+```
+
+Keep components modular and reusable.
+
+---
+
+# 25. Suggested Data Model
+
+Do not necessarily create every model immediately, but design the UI around these relationships:
+
+```text
+User
+  ↓
+Role
+
+Patient
+  ↓
+CareTeamMembership
+  ↓
+Clinician
+
+Patient
+  ↓
+Referral
+
+Patient
+  ↓
+ClinicalCase
+
+ClinicalCase
+  ↓
+Images
+  ↓
+Investigations
+  ↓
+AIAnalysis
+  ↓
+Diagnosis
+  ↓
+TreatmentPlan
+  ↓
+FollowUp
+
+ClinicalCase
+  ↓
+SecondOpinionRequest
+
+Patient
+  ↓
+AuditLog
+```
+
+Keep the data model normalized and extensible.
+
+---
+
+# 26. Important Clinical Data Principles
+
+Do not fabricate real clinical information.
+
+For development, use clearly labeled seed/demo data.
+
+Do not use demo patients that could be confused with actual patients.
+
+Clearly mark development data as:
+
+```text
+DEMO DATA
+```
+
+Do not present AI confidence as medically validated performance.
+
+Use placeholder/sample AI findings where the real AI service is not yet connected.
+
+---
+
+# 27. Error Handling
+
+Handle:
+
+* API failures
+* empty states
+* loading states
+* unauthorized access
+* expired permissions
+* missing images
+* incomplete examinations
+* network failures
+
+Examples:
+
+```text
+No pending referrals
+```
+
+```text
+Image unavailable
+Try again
+```
+
+```text
+You don't have permission to view this case.
+```
+
+Do not expose raw backend errors to users.
+
+---
+
+# 28. Testing
+
+Before finishing:
+
+Test:
+
+### Functional
+
+* Dashboard loads
+* Queue filtering works
+* Patient search works
+* Patient detail opens
+* Tabs work
+* Referral workflow works
+* Second opinion workflow works
+* Care-team display works
+* Permissions are enforced
+
+### UI
+
+* Desktop
+* Tablet
+* Mobile
+
+### Accessibility
+
+* Keyboard navigation
+* Focus states
+* Screen-reader labels
+* Color-independent status indicators
+
+### Security
+
+Verify that restricted patients cannot be accessed simply by changing a URL or patient ID.
+
+---
+
+# 29. Implementation Strategy
+
+Work incrementally.
+
+### Phase 1
+
+Build the dashboard shell and navigation.
+
+### Phase 2
+
+Implement the clinical queue.
+
+### Phase 3
+
+Implement patient search and patient detail.
+
+### Phase 4
+
+Implement clinical timeline.
+
+### Phase 5
+
+Implement image-review interface.
+
+### Phase 6
+
+Implement AI analysis panel.
+
+### Phase 7
+
+Implement referrals.
+
+### Phase 8
+
+Implement second opinions and care teams.
+
+### Phase 9
+
+Implement permissions/audit integration.
+
+### Phase 10
+
+Polish UX, responsive behavior, loading states and error handling.
+
+Do not build fake functionality that appears to work but is disconnected from the backend.
+
+Where backend functionality does not yet exist, create clean interfaces/mocks and document exactly what remains to be connected.
+
+---
+
+# 30. Important Product Decision
+
+The application should treat the patient's care relationship as:
+
+```text
+Patient
+    ↓
+Primary Care Team
+    ↓
+Specialist Collaboration
+    ↓
+Scoped Temporary Access
+```
+
+Not:
+
+```text
+Patient
+    ↓
+Every Ophthalmologist in the Platform
+```
+
+This is a core privacy and clinical-governance requirement.
+
+---
+
+# 31. Final Deliverable
+
+Implement the ophthalmologist dashboard directly in the existing Replit project.
+
+At the end:
+
+1. Ensure the application runs successfully.
+2. Ensure there are no console-breaking errors.
+3. Ensure routes work.
+4. Ensure the dashboard is responsive.
+5. Ensure the UI is clinically coherent.
+6. Ensure permissions are enforced server-side wherever backend functionality exists.
+7. Clearly identify any mocked functionality.
+8. Provide a concise summary of:
+
+   * files/components created or modified
+   * features implemented
+   * backend APIs required
+   * remaining integration work
+   * known limitations
+
+Most importantly:
+
+**Build this as a clinical workflow system, not as a generic analytics dashboard.**
+
+Every design decision should answer:
+
+> **Does this help an ophthalmologist safely identify, review, collaborate on, and manage the right patient at the right time?**
