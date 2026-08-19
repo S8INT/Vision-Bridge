@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,9 +16,14 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, RiskLevel } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { getRiskColor } from "@/utils/risk";
+import { getThumbnailUrl } from "@/services/imagingService";
+
+const MODEL_VERSION = "eretina-v1.0-deterministic";
+const MIN_REVIEW_QUALITY = 50;
 
 function getRiskVariant(risk: RiskLevel) {
   if (risk === "Urgent" || risk === "Severe") return "urgent";
@@ -29,12 +36,19 @@ export default function ScreeningDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
   const { screenings, getPatient, getConsultationForScreening, addConsultation, updateScreening, currentUser } = useApp();
+  const { user } = useAuth();
 
   const screening = screenings.find((s) => s.id === id);
   const patient = screening ? getPatient(screening.patientId) : undefined;
   const consultation = screening ? getConsultationForScreening(screening.id) : undefined;
   const [referralNotes, setReferralNotes] = useState("");
   const [showReferralForm, setShowReferralForm] = useState(false);
+  const [clinicalImpression, setClinicalImpression] = useState("");
+  const [reviewNote, setReviewNote] = useState("");
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [savingReview, setSavingReview] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [loadingImage, setLoadingImage] = useState(false);
 
   const { topPad, botPad } = useScreenPadding();
 
@@ -48,6 +62,18 @@ export default function ScreeningDetailScreen() {
 
   const activeScreening = screening;
   const riskColor = getRiskColor(screening.aiRiskLevel, colors);
+  const canReview = currentUser.role === "Doctor" || currentUser.role === "Admin";
+  const qualityBlocked = screening.imageQualityScore < MIN_REVIEW_QUALITY;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!screening.imageId || !user?.tenantId) return;
+    setLoadingImage(true);
+    getThumbnailUrl(screening.imageId, user.tenantId)
+      .then((url) => { if (!cancelled) setThumbnailUrl(url); })
+      .finally(() => { if (!cancelled) setLoadingImage(false); });
+    return () => { cancelled = true; };
+  }, [screening.imageId, user?.tenantId]);
 
   function handleRequestConsultation() {
     if (!referralNotes.trim()) {
@@ -66,6 +92,48 @@ export default function ScreeningDetailScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowReferralForm(false);
     Alert.alert("Consultation Requested", "Your request has been sent to the specialist queue.");
+  }
+
+  async function handleRequestRecapture() {
+    const now = new Date().toISOString();
+    const auditLine = `Recapture requested by ${currentUser.name} on ${new Date(now).toLocaleString("en-UG")} — image quality ${screening.imageQualityScore}% is below the review threshold.`;
+    setSavingReview(true);
+    await updateScreening(activeScreening.id, {
+      status: "Pending",
+      notes: [screening.notes, auditLine].filter(Boolean).join("\n\n"),
+    });
+    setSavingReview(false);
+    Alert.alert("Recapture requested", "This case remains pending until a usable retinal image is captured.");
+  }
+
+  async function handleSaveReview() {
+    if (qualityBlocked) {
+      Alert.alert("Image quality too low", "Request a recapture before confirming a clinical impression.");
+      return;
+    }
+    if (!clinicalImpression.trim()) {
+      Alert.alert("Clinical impression required", "Record your confirmed clinical impression before completing the review.");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const auditLines = [
+      screening.notes,
+      `Clinical impression — ${currentUser.name} — ${new Date(now).toLocaleString("en-UG")}: ${clinicalImpression.trim()}`,
+      reviewNote.trim() ? `Review note — ${reviewNote.trim()}` : "",
+    ].filter(Boolean);
+
+    setSavingReview(true);
+    await updateScreening(activeScreening.id, {
+      status: "Reviewed",
+      reviewedBy: currentUser.name,
+      reviewedAt: now,
+      notes: auditLines.join("\n\n"),
+    });
+    setSavingReview(false);
+    setShowReviewForm(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert("Review saved", "The screening is now marked as clinically reviewed.");
   }
 
   return (
@@ -114,6 +182,57 @@ export default function ScreeningDetailScreen() {
           </View>
         </TouchableOpacity>
       ) : null}
+
+      <View style={[styles.imageCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.cardHeaderRow}>
+          <View>
+            <Text style={[styles.cardLabel, { color: colors.mutedForeground }]}>RETINAL IMAGE</Text>
+            <Text style={[styles.cardSubLabel, { color: colors.mutedForeground }]}>
+              Stored image and capture metadata
+            </Text>
+          </View>
+          <Badge label={screening.imageId ? "Stored" : "No image ID"} variant={screening.imageId ? "success" : "muted"} size="sm" />
+        </View>
+        <View style={[styles.imageFrame, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+          {loadingImage ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : thumbnailUrl || screening.imageUri ? (
+            <Image
+              source={{ uri: thumbnailUrl || screening.imageUri }}
+              style={styles.retinalImage}
+              resizeMode="contain"
+              accessibilityLabel="Retinal screening image"
+            />
+          ) : (
+            <>
+              <Feather name="image" size={28} color={colors.mutedForeground} />
+              <Text style={[styles.imagePlaceholder, { color: colors.mutedForeground }]}>
+                No stored image is linked to this screening
+              </Text>
+            </>
+          )}
+        </View>
+        <View style={styles.imageMetaGrid}>
+          <View style={styles.imageMetaItem}>
+            <Text style={[styles.imageMetaLabel, { color: colors.mutedForeground }]}>Captured</Text>
+            <Text style={[styles.imageMetaValue, { color: colors.foreground }]}>
+              {new Date(screening.capturedAt).toLocaleString("en-UG")}
+            </Text>
+          </View>
+          <View style={styles.imageMetaItem}>
+            <Text style={[styles.imageMetaLabel, { color: colors.mutedForeground }]}>Operator</Text>
+            <Text style={[styles.imageMetaValue, { color: colors.foreground }]} numberOfLines={1}>
+              {screening.capturedBy}
+            </Text>
+          </View>
+          <View style={styles.imageMetaItem}>
+            <Text style={[styles.imageMetaLabel, { color: colors.mutedForeground }]}>Image ID</Text>
+            <Text style={[styles.imageMetaValue, { color: colors.foreground }]} numberOfLines={1}>
+              {screening.imageId ?? "Not available"}
+            </Text>
+          </View>
+        </View>
+      </View>
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.cardLabel, { color: colors.mutedForeground }]}>AI FINDINGS</Text>

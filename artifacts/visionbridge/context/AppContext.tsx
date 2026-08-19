@@ -54,9 +54,11 @@ export interface Screening {
   capturedAt: string;
   capturedBy: string;
   imageUri?: string;
+  imageId?: string;
   imageQualityScore: number;
   aiRiskLevel: RiskLevel;
   aiConfidence: number;
+  aiModelVersion?: string;
   aiFindings: string[];
   status: ScreeningStatus;
   notes?: string;

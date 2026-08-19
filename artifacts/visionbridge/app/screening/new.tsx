@@ -124,7 +124,7 @@ export default function NewScreeningScreen() {
   const [isOfflineQueued, setIsOfflineQueued] = useState(false);
   const [queueStats, setQueueStats] = useState<{ queued: number; failed: number } | null>(null);
   const [savedScreeningId, setSavedScreeningId] = useState<string | null>(null);
-  const [aiResult, setAiResult] = useState<{ riskLevel: RiskLevel; confidence: number; findings: string[] } | null>(null);
+  const [aiResult, setAiResult] = useState<{ riskLevel: RiskLevel; confidence: number; findings: string[]; modelVersion?: string } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -278,7 +278,7 @@ export default function NewScreeningScreen() {
       });
       if (res.ok) {
         const data = await res.json();
-        setAiResult({ riskLevel: data.riskLevel, confidence: data.confidence, findings: data.findings });
+        setAiResult({ riskLevel: data.riskLevel, confidence: data.confidence, findings: data.findings, modelVersion: data.modelVersion });
         setStep("result");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         return;
@@ -290,7 +290,7 @@ export default function NewScreeningScreen() {
     const hash = selectedPatientId.split("").reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 0x9e3779b9) >>> 0, 0x811c9dc5);
     const levels: RiskLevel[] = ["Normal", "Mild", "Moderate", "Severe", "Urgent"];
     const riskLevel = levels[hash % levels.length];
-    setAiResult({ riskLevel, confidence: 72 + (hash % 20), findings: AI_FINDINGS_BY_RISK[riskLevel] });
+    setAiResult({ riskLevel, confidence: 72 + (hash % 20), findings: AI_FINDINGS_BY_RISK[riskLevel], modelVersion: "eretina-v1.0-deterministic (offline fallback)" });
     setStep("result");
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
@@ -307,9 +307,11 @@ export default function NewScreeningScreen() {
       patientId: selectedPatientId,
       capturedBy: currentUser.id,
       imageUri: imageUri ?? undefined,
+      imageId: uploadResult.imageId,
       imageQualityScore: qualityScore,
       aiRiskLevel: aiResult.riskLevel,
       aiConfidence: aiResult.confidence,
+      aiModelVersion: aiResult.modelVersion ?? "eretina-v1.0-deterministic",
       aiFindings: aiResult.findings,
       status: isOfflineQueued ? "Pending" : "Screened",
       notes: notes.trim() || undefined,
