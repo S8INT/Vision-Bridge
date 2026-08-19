@@ -35,7 +35,7 @@ function getRiskVariant(risk: RiskLevel) {
 export default function ScreeningDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
-  const { screenings, getPatient, getConsultationForScreening, addConsultation, updateScreening, currentUser } = useApp();
+  const { screenings, getPatient, getScreeningsForPatient, getConsultationForScreening, addConsultation, updateScreening, currentUser } = useApp();
   const { user } = useAuth();
 
   const screening = screenings.find((s) => s.id === id);
@@ -49,6 +49,7 @@ export default function ScreeningDetailScreen() {
   const [savingReview, setSavingReview] = useState(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [loadingImage, setLoadingImage] = useState(false);
+  const [comparisonUrls, setComparisonUrls] = useState<Record<string, string>>({});
 
   const { topPad, botPad } = useScreenPadding();
 
@@ -64,6 +65,9 @@ export default function ScreeningDetailScreen() {
   const riskColor = getRiskColor(screening.aiRiskLevel, colors);
   const canReview = currentUser.role === "Doctor" || currentUser.role === "Admin";
   const qualityBlocked = screening.imageQualityScore < MIN_REVIEW_QUALITY;
+  const priorScreenings = getScreeningsForPatient(screening.patientId)
+    .filter((item) => item.id !== screening.id)
+    .slice(0, 2);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +78,20 @@ export default function ScreeningDetailScreen() {
       .finally(() => { if (!cancelled) setLoadingImage(false); });
     return () => { cancelled = true; };
   }, [screening.imageId, user?.tenantId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.tenantId || priorScreenings.length === 0) return;
+    Promise.all(
+      priorScreenings
+        .filter((item) => item.imageId)
+        .map(async (item) => [item.id, await getThumbnailUrl(item.imageId!, user.tenantId)] as const),
+    ).then((entries) => {
+      if (cancelled) return;
+      setComparisonUrls(Object.fromEntries(entries.filter((entry): entry is [string, string] => Boolean(entry[1]))));
+    });
+    return () => { cancelled = true; };
+  }, [user?.tenantId, screening.id, priorScreenings.map((item) => item.id).join(",")]);
 
   function handleRequestConsultation() {
     if (!referralNotes.trim()) {
@@ -96,11 +114,11 @@ export default function ScreeningDetailScreen() {
 
   async function handleRequestRecapture() {
     const now = new Date().toISOString();
-    const auditLine = `Recapture requested by ${currentUser.name} on ${new Date(now).toLocaleString("en-UG")} — image quality ${screening.imageQualityScore}% is below the review threshold.`;
+    const auditLine = `Recapture requested by ${currentUser.name} on ${new Date(now).toLocaleString("en-UG")} — image quality ${activeScreening.imageQualityScore}% is below the review threshold.`;
     setSavingReview(true);
     await updateScreening(activeScreening.id, {
       status: "Pending",
-      notes: [screening.notes, auditLine].filter(Boolean).join("\n\n"),
+      notes: [activeScreening.notes, auditLine].filter(Boolean).join("\n\n"),
     });
     setSavingReview(false);
     Alert.alert("Recapture requested", "This case remains pending until a usable retinal image is captured.");
@@ -118,7 +136,7 @@ export default function ScreeningDetailScreen() {
 
     const now = new Date().toISOString();
     const auditLines = [
-      screening.notes,
+      activeScreening.notes,
       `Clinical impression — ${currentUser.name} — ${new Date(now).toLocaleString("en-UG")}: ${clinicalImpression.trim()}`,
       reviewNote.trim() ? `Review note — ${reviewNote.trim()}` : "",
     ].filter(Boolean);
@@ -232,6 +250,36 @@ export default function ScreeningDetailScreen() {
             </Text>
           </View>
         </View>
+        {priorScreenings.length > 0 ? (
+          <View style={styles.comparisonSection}>
+            <Text style={[styles.cardLabel, { color: colors.mutedForeground }]}>PRIOR IMAGE COMPARISON</Text>
+            <View style={styles.comparisonRow}>
+              {priorScreenings.map((prior) => {
+                const priorPatient = getPatient(prior.patientId);
+                return (
+                  <View key={prior.id} style={[styles.comparisonCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                    {comparisonUrls[prior.id] ? (
+                      <Image source={{ uri: comparisonUrls[prior.id] }} style={styles.comparisonImage} resizeMode="contain" />
+                    ) : (
+                      <View style={styles.comparisonPlaceholder}>
+                        <Feather name="image" size={18} color={colors.mutedForeground} />
+                        <Text style={[styles.comparisonPlaceholderText, { color: colors.mutedForeground }]}>
+                          {prior.imageId ? "Loading image" : "No stored image"}
+                        </Text>
+                      </View>
+                    )}
+                    <Text style={[styles.comparisonLabel, { color: colors.foreground }]} numberOfLines={1}>
+                      {priorPatient ? `${priorPatient.firstName} · ` : ""}{new Date(prior.capturedAt).toLocaleDateString("en-UG")}
+                    </Text>
+                    <Text style={[styles.comparisonMeta, { color: colors.mutedForeground }]}>
+                      {prior.aiRiskLevel} · {prior.imageQualityScore}%
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
       </View>
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -252,9 +300,27 @@ export default function ScreeningDetailScreen() {
           <View style={styles.qualityItem}>
             <Feather name="cpu" size={14} color={colors.mutedForeground} />
             <Text style={[styles.qualityLabel, { color: colors.mutedForeground }]}>AI Model</Text>
-            <Text style={[styles.qualityVal, { color: colors.foreground }]}>EfficientNet-B4</Text>
+            <Text style={[styles.qualityVal, { color: colors.foreground }]}>{screening.aiModelVersion ?? MODEL_VERSION}</Text>
           </View>
         </View>
+        <View style={[styles.qualityMeter, { backgroundColor: colors.muted }]}>
+          <View
+            style={[
+              styles.qualityFill,
+              {
+                width: `${Math.max(0, Math.min(100, screening.imageQualityScore))}%` as any,
+                backgroundColor: qualityBlocked ? colors.destructive : screening.imageQualityScore < 70 ? colors.warning : colors.success,
+              },
+            ]}
+          />
+        </View>
+        <Text style={[styles.qualityHint, { color: qualityBlocked ? colors.destructive : colors.mutedForeground }]}>
+          {qualityBlocked
+            ? `Review blocked below ${MIN_REVIEW_QUALITY}%. Recapture required.`
+            : screening.imageQualityScore < 70
+              ? "Acceptable quality — confirm image clarity before relying on findings."
+              : "Quality passed the automated review gate."}
+        </Text>
       </View>
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -285,6 +351,96 @@ export default function ScreeningDetailScreen() {
           AI analysis is a clinical decision support tool. All findings require ophthalmologist confirmation before treatment.
         </Text>
       </View>
+
+      {canReview ? (
+        <View style={[styles.reviewCard, { backgroundColor: colors.card, borderColor: qualityBlocked ? colors.urgentBorder : colors.border }]}>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.reviewHeading}>
+              <Feather name="check-square" size={18} color={qualityBlocked ? colors.destructive : colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.reviewTitle, { color: colors.foreground }]}>Clinical review</Text>
+                <Text style={[styles.reviewSubtitle, { color: colors.mutedForeground }]}>
+                  {screening.status === "Reviewed" ? `Reviewed by ${screening.reviewedBy ?? "clinician"}` : "Confirm the case before treatment or referral"}
+                </Text>
+              </View>
+            </View>
+            {screening.status === "Reviewed" && <Badge label="Confirmed" variant="success" size="sm" />}
+          </View>
+
+          {qualityBlocked ? (
+            <View style={[styles.blockedBox, { backgroundColor: colors.urgentBg, borderColor: colors.urgentBorder }]}>
+              <Feather name="slash" size={18} color={colors.destructive} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.blockedTitle, { color: colors.urgentText }]}>Clinical review blocked</Text>
+                <Text style={[styles.blockedText, { color: colors.urgentText }]}>
+                  This image scored {screening.imageQualityScore}%. Ask the operator to recapture before confirming a finding.
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          {!showReviewForm && screening.status !== "Reviewed" ? (
+            <TouchableOpacity
+              style={[styles.primaryBtn, { backgroundColor: qualityBlocked ? colors.mutedForeground : colors.primary }]}
+              onPress={() => setShowReviewForm(true)}
+              disabled={qualityBlocked}
+              activeOpacity={0.85}
+            >
+              <Feather name="edit-3" size={18} color="#fff" />
+              <Text style={styles.primaryBtnText}>Record clinical impression</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {qualityBlocked ? (
+            <TouchableOpacity
+              style={[styles.secondaryBtn, { borderColor: colors.urgentBorder }]}
+              onPress={handleRequestRecapture}
+              disabled={savingReview}
+              activeOpacity={0.85}
+            >
+              {savingReview ? <ActivityIndicator color={colors.destructive} /> : <Feather name="refresh-cw" size={17} color={colors.destructive} />}
+              <Text style={[styles.secondaryBtnText, { color: colors.destructive }]}>Request recapture</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {showReviewForm ? (
+            <View style={styles.reviewForm}>
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>CONFIRMED CLINICAL IMPRESSION</Text>
+              <TextInput
+                value={clinicalImpression}
+                onChangeText={setClinicalImpression}
+                placeholder="e.g. No signs of sight-threatening disease; continue routine monitoring"
+                placeholderTextColor={colors.mutedForeground}
+                multiline
+                numberOfLines={4}
+                style={[styles.notesInput, { color: colors.foreground, borderColor: colors.border }]}
+              />
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>AUDIT NOTE (OPTIONAL)</Text>
+              <TextInput
+                value={reviewNote}
+                onChangeText={setReviewNote}
+                placeholder="Additional reasoning, image limitations or follow-up instructions"
+                placeholderTextColor={colors.mutedForeground}
+                multiline
+                numberOfLines={3}
+                style={[styles.notesInput, { color: colors.foreground, borderColor: colors.border, minHeight: 64 }]}
+              />
+              <TouchableOpacity
+                style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
+                onPress={handleSaveReview}
+                disabled={savingReview}
+                activeOpacity={0.85}
+              >
+                {savingReview ? <ActivityIndicator color="#fff" /> : <Feather name="check" size={18} color="#fff" />}
+                <Text style={styles.primaryBtnText}>{savingReview ? "Saving review..." : "Confirm and save review"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowReviewForm(false)} disabled={savingReview}>
+                <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       {consultation ? (
         <TouchableOpacity
@@ -368,6 +524,24 @@ const styles = StyleSheet.create({
   riskSub: { fontSize: 12, marginTop: 2 },
   card: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 10 },
   cardLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 1 },
+  cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  cardSubLabel: { fontSize: 12, marginTop: 3 },
+  imageCard: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 12 },
+  imageFrame: { height: 210, borderWidth: 1, borderRadius: 12, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  retinalImage: { width: "100%", height: "100%" },
+  imagePlaceholder: { fontSize: 12, marginTop: 8, textAlign: "center", paddingHorizontal: 28 },
+  imageMetaGrid: { flexDirection: "row", gap: 10 },
+  imageMetaItem: { flex: 1, gap: 3 },
+  imageMetaLabel: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.4 },
+  imageMetaValue: { fontSize: 11, fontWeight: "600" },
+  comparisonSection: { gap: 9, marginTop: 2 },
+  comparisonRow: { flexDirection: "row", gap: 9 },
+  comparisonCard: { flex: 1, borderWidth: 1, borderRadius: 10, padding: 8, gap: 3 },
+  comparisonImage: { width: "100%", height: 78, borderRadius: 7 },
+  comparisonPlaceholder: { height: 78, alignItems: "center", justifyContent: "center", gap: 4 },
+  comparisonPlaceholderText: { fontSize: 10, textAlign: "center" },
+  comparisonLabel: { fontSize: 11, fontWeight: "700" },
+  comparisonMeta: { fontSize: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   patientName: { fontSize: 15, fontWeight: "600" },
   patientMeta: { fontSize: 12 },
@@ -384,6 +558,9 @@ const styles = StyleSheet.create({
   qualityLabel: { fontSize: 11 },
   qualityVal: { fontSize: 13, fontWeight: "600" },
   qualityDivider: { width: 1, marginHorizontal: 8 },
+  qualityMeter: { height: 7, borderRadius: 4, overflow: "hidden" },
+  qualityFill: { height: 7, borderRadius: 4 },
+  qualityHint: { fontSize: 11, lineHeight: 16 },
   infoRow: { flexDirection: "row", justifyContent: "space-between" },
   infoLabel: { fontSize: 13 },
   infoValue: { fontSize: 13, fontWeight: "500", flex: 1, textAlign: "right" },
@@ -396,6 +573,17 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   disclaimerText: { fontSize: 12, lineHeight: 18, flex: 1 },
+  reviewCard: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 12 },
+  reviewHeading: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  reviewTitle: { fontSize: 15, fontWeight: "800" },
+  reviewSubtitle: { fontSize: 12, marginTop: 3, lineHeight: 17 },
+  blockedBox: { flexDirection: "row", alignItems: "flex-start", gap: 9, padding: 12, borderWidth: 1, borderRadius: 10 },
+  blockedTitle: { fontSize: 13, fontWeight: "800" },
+  blockedText: { fontSize: 12, lineHeight: 17, marginTop: 3 },
+  secondaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
+  secondaryBtnText: { fontSize: 14, fontWeight: "700" },
+  reviewForm: { gap: 10 },
+  formLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
   consultationCard: {
     borderWidth: 1,
     borderRadius: 14,
