@@ -157,9 +157,6 @@ export default function DashboardScreen() {
   const actionMinWidth = `${Math.floor(100 / Math.min(r.cols, 4)) - 2}%` as const;
 
   const role: UserRole = user?.role ?? "Viewer";
-  if (role === "Doctor") {
-    return <OphthalmologistDashboard />;
-  }
   const roleMeta = ROLE_META[role];
   const quickActions = ROLE_ACTIONS[role];
   const statDefs = ROLE_STATS[role];
@@ -219,6 +216,13 @@ export default function DashboardScreen() {
   );
 
   const { topPad, botPad } = useScreenPadding();
+
+  // Keep this branch after all hooks above. Returning early before the
+  // role-specific dashboard hooks caused React hook-order crashes when the
+  // authenticated role changed during login/logout.
+  if (role === "Doctor") {
+    return <OphthalmologistDashboard />;
+  }
 
   const greeting = (() => {
     const h = new Date().getHours();
