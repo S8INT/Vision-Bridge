@@ -385,7 +385,26 @@ router.patch("/consultations/:id", async (req: Request, res: Response) => {
   if (!validateStatus(req, res, CONSULTATION_STATUSES)) return;
   const id = String(req.params["id"] ?? "");
   try {
-    const [row] = await db!.update(consultationsTable).set(req.body).where(eq(consultationsTable.id, id)).returning();
+      const [existing] = await db!.select().from(consultationsTable)
+        .where(and(eq(consultationsTable.id, id), eq(consultationsTable.tenantId, req.auth.tenantId)))
+        .limit(1);
+      if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+
+      // Doctors may only write care-plan fields for consultations assigned to
+      // their own doctor record. Tenant access alone is not sufficient.
+      if (req.auth.role === "Doctor") {
+        const [doctor] = await db!.select().from(doctorsTable)
+          .where(and(eq(doctorsTable.tenantId, req.auth.tenantId), eq(doctorsTable.userId, req.auth.sub)))
+          .limit(1);
+        if (!doctor || existing.assignedDoctorId !== doctor.id) {
+          res.status(403).json({ error: "This patient is outside your assigned care team" });
+          return;
+        }
+      }
+
+      const [row] = await db!.update(consultationsTable).set(req.body).where(
+        and(eq(consultationsTable.id, id), eq(consultationsTable.tenantId, req.auth.tenantId)),
+      ).returning();
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
     res.json({ item: row });
 
