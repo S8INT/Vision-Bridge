@@ -6,7 +6,7 @@ import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
-import { useApp, type Consultation, type Screening } from "@/context/AppContext";
+import { useApp, type Consultation, type Screening, type Notification } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { SyncBanner } from "@/components/SyncBanner";
 
@@ -135,6 +135,10 @@ export function OphthalmologistDashboard() {
     screenings,
     consultations,
     referrals,
+    notifications,
+    unreadCount,
+    markNotificationRead,
+    markAllNotificationsRead,
     isOnline,
     isSyncing,
     lastSyncAt,
@@ -144,6 +148,7 @@ export function OphthalmologistDashboard() {
   } = useApp();
   const { user } = useAuth();
   const [filter, setFilter] = useState<QueueFilter>("All");
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const openConsultations = useMemo(
     () => consultations.filter(isOpenConsultation),
@@ -195,6 +200,23 @@ export function OphthalmologistDashboard() {
     month: "long",
   });
 
+  const recentNotifications = useMemo(
+    () => notifications
+      .filter((item) => ["ConsultationUpdate", "ScreeningReviewed", "PatientReferred", "ReferralUpdate", "AppointmentConfirmed"].includes(item.type))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 5),
+    [notifications],
+  );
+
+  function openNotification(notification: Notification) {
+    markNotificationRead(notification.id);
+    setShowNotifications(false);
+    if (notification.consultationId) router.push(`/consultation/${notification.consultationId}`);
+    else if (notification.screeningId) router.push(`/screening/${notification.screeningId}`);
+    else if (notification.patientId) router.push(`/patient/${notification.patientId}`);
+    else router.push("/(tabs)/notifications");
+  }
+
   function openQueueItem(item: QueueItem) {
     router.push(item.kind === "consultation"
       ? `/consultation/${item.id}`
@@ -216,16 +238,82 @@ export function OphthalmologistDashboard() {
           </Text>
           <Text style={[styles.date, { color: colors.mutedForeground }]}>{dateLabel}</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.profileButton, { backgroundColor: colors.primary }]}
-          onPress={() => router.push("/profile" as never)}
-          accessibilityLabel="Open profile settings"
-        >
-          <Text style={styles.profileInitials}>
-            {(user?.fullName || "DR").split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.notificationButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => setShowNotifications((visible) => !visible)}
+            accessibilityLabel={`${unreadCount} unread notifications`}
+          >
+            <Feather name="bell" size={19} color={colors.foreground} />
+            {unreadCount > 0 ? (
+              <View style={[styles.notificationBadge, { backgroundColor: colors.destructive }]}>
+                <Text style={styles.notificationBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.profileButton, { backgroundColor: colors.primary }]}
+            onPress={() => router.push("/profile" as never)}
+            accessibilityLabel="Open profile settings"
+          >
+            <Text style={styles.profileInitials}>
+              {(user?.fullName || "DR").split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {showNotifications ? (
+        <View style={[styles.notificationPanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.notificationPanelHeader}>
+            <View>
+              <Text style={[styles.notificationPanelTitle, { color: colors.foreground }]}>Clinical alerts</Text>
+              <Text style={[styles.notificationPanelSubtitle, { color: colors.mutedForeground }]}>
+                {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}` : "You’re all caught up"}
+              </Text>
+            </View>
+            {unreadCount > 0 ? (
+              <TouchableOpacity onPress={() => markAllNotificationsRead()}>
+                <Text style={[styles.markAllText, { color: colors.primary }]}>Mark all read</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          {recentNotifications.length > 0 ? recentNotifications.map((notification) => (
+            <TouchableOpacity
+              key={notification.id}
+              style={[styles.notificationRow, { borderTopColor: colors.border, opacity: notification.read ? 0.68 : 1 }]}
+              onPress={() => openNotification(notification)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.notificationIcon, { backgroundColor: notification.read ? colors.muted : `${colors.primary}16` }]}>
+                <Feather
+                  name={notification.type === "ScreeningReviewed" ? "eye" : notification.type === "PatientReferred" || notification.type === "ReferralUpdate" ? "send" : "message-circle"}
+                  size={15}
+                  color={notification.read ? colors.mutedForeground : colors.primary}
+                />
+              </View>
+              <View style={styles.notificationCopy}>
+                <View style={styles.notificationTitleRow}>
+                  <Text style={[styles.notificationTitle, { color: colors.foreground, fontWeight: notification.read ? "600" : "800" }]} numberOfLines={1}>
+                    {notification.title}
+                  </Text>
+                  {!notification.read ? <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} /> : null}
+                </View>
+                <Text style={[styles.notificationBody, { color: colors.mutedForeground }]} numberOfLines={2}>{notification.body}</Text>
+              </View>
+            </TouchableOpacity>
+          )) : (
+            <View style={styles.notificationEmpty}>
+              <Feather name="bell-off" size={20} color={colors.mutedForeground} />
+              <Text style={[styles.notificationEmptyText, { color: colors.mutedForeground }]}>No clinical alerts yet</Text>
+            </View>
+          )}
+          <TouchableOpacity style={styles.viewNotifications} onPress={() => { setShowNotifications(false); router.push("/(tabs)/notifications"); }}>
+            <Text style={[styles.viewNotificationsText, { color: colors.primary }]}>View all notifications</Text>
+            <Feather name="arrow-right" size={14} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <View style={[styles.scopeBanner, { backgroundColor: `${colors.primary}0d`, borderColor: `${colors.primary}28` }]}>
         <Feather name="lock" size={15} color={colors.primary} />
@@ -366,8 +454,28 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 11, fontWeight: "800", letterSpacing: 1.2, marginBottom: 6 },
   title: { fontSize: 25, fontWeight: "800", letterSpacing: -0.4 },
   date: { fontSize: 13, marginTop: 5 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  notificationButton: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: "center", justifyContent: "center", position: "relative" },
+  notificationBadge: { position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
+  notificationBadgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
   profileButton: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
   profileInitials: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  notificationPanel: { borderWidth: 1, borderRadius: 14, overflow: "hidden", marginTop: -6 },
+  notificationPanelHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, gap: 10 },
+  notificationPanelTitle: { fontSize: 15, fontWeight: "800" },
+  notificationPanelSubtitle: { fontSize: 11, marginTop: 3 },
+  markAllText: { fontSize: 11, fontWeight: "800" },
+  notificationRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, padding: 12, borderTopWidth: 1 },
+  notificationIcon: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  notificationCopy: { flex: 1, gap: 3 },
+  notificationTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  notificationTitle: { flex: 1, fontSize: 12 },
+  unreadDot: { width: 7, height: 7, borderRadius: 4 },
+  notificationBody: { fontSize: 11, lineHeight: 16 },
+  notificationEmpty: { alignItems: "center", gap: 7, paddingVertical: 20 },
+  notificationEmptyText: { fontSize: 12 },
+  viewNotifications: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 12, borderTopWidth: 1, borderTopColor: "#e2e8f0" },
+  viewNotificationsText: { fontSize: 12, fontWeight: "800" },
   scopeBanner: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 13, borderWidth: 1, borderRadius: 13 },
   scopeCopy: { flex: 1, gap: 3 },
   scopeTitle: { fontSize: 13, fontWeight: "700" },
