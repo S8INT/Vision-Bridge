@@ -178,7 +178,9 @@ export default function ConsultationDetailScreen() {
           {consultation.assignmentMethod ? (
             <View style={styles.metaItem}>
               <Feather name="shuffle" size={13} color={colors.mutedForeground} />
-              <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{consultation.assignmentMethod}</Text>
+               <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+                 {consultation.assignmentMethod === "Intelligent" ? "Smart routing" : consultation.assignmentMethod}
+               </Text>
             </View>
           ) : null}
           {consultation.followUpDate ? (
@@ -286,7 +288,11 @@ export default function ConsultationDetailScreen() {
         <View style={[styles.section, { backgroundColor: colors.warningLight, borderColor: "#fcd34d" }]}>
           <View style={styles.patientRow}>
             <Feather name="alert-circle" size={18} color={colors.warning} />
-            <Text style={[styles.warningText, { color: "#92400e" }]}>No specialist assigned yet. Use Assign Doctor above.</Text>
+               <Text style={[styles.warningText, { color: "#92400e" }]}>
+                 {consultation.routingStatus === "SPECIALTY_QUEUE"
+                   ? `Waiting in the ${consultation.specialty ?? "specialty"} queue. A coordinator can assign this case when an appropriate specialist is available.`
+                   : "No specialist assigned yet. Use Assign Doctor above."}
+               </Text>
           </View>
         </View>
       )}
@@ -314,6 +320,25 @@ export default function ConsultationDetailScreen() {
       {consultation.clinicalNotes ? (
         <Section title="CLINICAL NOTES">
           <Text style={[styles.bodyText, { color: colors.foreground }]}>{consultation.clinicalNotes}</Text>
+        </Section>
+      ) : null}
+
+      {consultation.routingReason ? (
+        <Section title="ROUTING SUMMARY">
+          <View style={styles.patientRow}>
+            <Feather name="git-branch" size={18} color={colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.docName, { color: colors.foreground }]}>
+                {consultation.specialty ?? "General Ophthalmology"} pathway
+              </Text>
+              <Text style={[styles.docMeta, { color: colors.mutedForeground }]}>
+                {consultation.routingReason}
+              </Text>
+            </View>
+          </View>
+          <Text style={[styles.routingDisclaimer, { color: colors.mutedForeground }]}>
+            Routing is a clinical decision-support recommendation. The assigned ophthalmologist remains responsible for the clinical assessment.
+          </Text>
         </Section>
       ) : null}
 
@@ -588,6 +613,7 @@ const styles = StyleSheet.create({
   responseDate: { fontSize: 11 },
   editLink: { fontSize: 13, fontWeight: "600" },
   bodyText: { fontSize: 14, lineHeight: 22 },
+  routingDisclaimer: { fontSize: 11, lineHeight: 16, marginTop: 2 },
 
 
   ghostBtn: {

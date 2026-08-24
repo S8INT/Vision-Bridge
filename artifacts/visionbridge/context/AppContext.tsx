@@ -27,6 +27,7 @@ export type AppointmentStatus = "Requested" | "Confirmed" | "Completed" | "Cance
 export type UserRole = "Admin" | "Doctor" | "Technician" | "CHW" | "Viewer" | "Patient";
 export type CampaignType = "School" | "DiabetesClinic" | "Community" | "MobileUnit";
 export type CampaignStatus = "Planned" | "Active" | "Completed" | "Cancelled";
+export type ConsultationType = "NEW_PATIENT" | "SPECIALIST_REFERRAL" | "FOLLOW_UP" | "SECOND_OPINION" | "REMOTE_IMAGE_REVIEW" | "EMERGENCY";
 
 export interface Patient {
   id: string;
@@ -126,9 +127,17 @@ export interface Consultation {
   assignedTo?: string;
   assignedDoctorId?: string;
   assignedAt?: string;
-  assignmentMethod?: "RoundRobin" | "Manual";
+  assignmentMethod?: "Intelligent" | "RoundRobin" | "Manual";
   status: CareCoordinationStatus;
-  priority: "Routine" | "Urgent" | "Emergency";
+  priority: "Routine" | "High" | "Urgent" | "Emergency";
+  consultationType?: ConsultationType;
+  specialty?: string;
+  preferredDoctorId?: string;
+  routingStatus?: "ROUTING" | "ASSIGNED" | "SPECIALTY_QUEUE" | "ESCALATED";
+  routingReason?: string;
+  routingScore?: number;
+  acknowledgementDueAt?: string;
+  acknowledgedAt?: string;
   clinicalNotes?: string;
   diagnosisOverride?: string;
   treatmentPlan?: string;

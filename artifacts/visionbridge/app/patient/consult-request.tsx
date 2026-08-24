@@ -171,6 +171,8 @@ export default function ConsultRequestScreen() {
 
     const body: Record<string, any> = {
       priority,
+      consultationType: priority === "Emergency" ? "EMERGENCY" : "NEW_PATIENT",
+      specialty: specialtyLabel,
       clinicalNotes: `Patient-requested ${specialtyLabel} consultation.\n\nSymptoms: ${allSymptoms.join(", ")}.${imageUri ? "\n\nPatient attached an eye image." : ""}`,
       screeningId: myScreening?.id ?? null,
     };
@@ -471,7 +473,7 @@ export default function ConsultRequestScreen() {
             <View style={s.autoAssignNote}>
               <Feather name="info" size={14} color={colors.mutedForeground} />
               <Text style={s.autoAssignText}>
-                Pick a specific specialist, or leave unselected to be automatically matched.
+                 Pick a specific specialist only if you have a preference. Otherwise VisionBridge will match your request by specialty, urgency, availability, continuity, and workload.
               </Text>
             </View>
             <View style={{ marginTop: 10 }}>

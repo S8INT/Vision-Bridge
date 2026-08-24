@@ -16,6 +16,9 @@ export const doctorsTable = pgTable("doctors", {
   phone: text("phone"),
   isAvailable: boolean("is_available").notNull().default(true),
   totalAssigned: integer("total_assigned").notNull().default(0),
+  capabilities: jsonb("capabilities").$type<string[]>().notNull().default([]),
+  maxConcurrentCases: integer("max_concurrent_cases").notNull().default(20),
+  blockedUntil: timestamp("blocked_until"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -76,9 +79,17 @@ export const consultationsTable = pgTable("consultations", {
   assignedTo: text("assigned_to"),
   assignedDoctorId: uuid("assigned_doctor_id").references(() => doctorsTable.id),
   assignedAt: timestamp("assigned_at"),
-  assignmentMethod: text("assignment_method").$type<"RoundRobin" | "Manual">(),
+  assignmentMethod: text("assignment_method").$type<"Intelligent" | "RoundRobin" | "Manual">(),
   status: text("status").$type<"Pending" | "Assigned" | "InReview" | "Reviewed" | "Referred" | "Completed" | "Cancelled">().notNull().default("Pending"),
-  priority: text("priority").$type<"Routine" | "Urgent" | "Emergency">().notNull().default("Routine"),
+  priority: text("priority").$type<"Routine" | "High" | "Urgent" | "Emergency">().notNull().default("Routine"),
+  consultationType: text("consultation_type").$type<"NEW_PATIENT" | "SPECIALIST_REFERRAL" | "FOLLOW_UP" | "SECOND_OPINION" | "REMOTE_IMAGE_REVIEW" | "EMERGENCY">().notNull().default("NEW_PATIENT"),
+  specialty: text("specialty"),
+  preferredDoctorId: uuid("preferred_doctor_id").references(() => doctorsTable.id),
+  routingStatus: text("routing_status").$type<"ROUTING" | "ASSIGNED" | "SPECIALTY_QUEUE" | "ESCALATED">().notNull().default("ROUTING"),
+  routingReason: text("routing_reason"),
+  routingScore: integer("routing_score"),
+  acknowledgementDueAt: timestamp("acknowledgement_due_at"),
+  acknowledgedAt: timestamp("acknowledged_at"),
   clinicalNotes: text("clinical_notes"),
   diagnosisOverride: text("diagnosis_override"),
   treatmentPlan: text("treatment_plan"),
@@ -93,6 +104,33 @@ export const consultationsTable = pgTable("consultations", {
 });
 
 export type Consultation = typeof consultationsTable.$inferSelect;
+
+// Explainable, persistent output from the routing engine. Candidate details are
+// retained for governance and manual review without exposing internal scores in
+// the patient experience.
+export const routingDecisionsTable = pgTable("routing_decisions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
+  consultationId: uuid("consultation_id").notNull().references(() => consultationsTable.id),
+  recommendedSpecialty: text("recommended_specialty").notNull(),
+  eligibleCandidates: jsonb("eligible_candidates").$type<Array<{
+    doctorId: string;
+    name: string;
+    score: number;
+    reasons: string[];
+  }>>().notNull().default([]),
+  selectedClinicianId: uuid("selected_clinician_id").references(() => doctorsTable.id),
+  routingScore: integer("routing_score"),
+  rulesVersion: text("rules_version").notNull().default("routing-v1"),
+  routingReason: text("routing_reason").notNull(),
+  fallbackQueue: text("fallback_queue"),
+  override: boolean("override").notNull().default(false),
+  overrideReason: text("override_reason"),
+  overriddenBy: uuid("overridden_by").references(() => usersTable.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type RoutingDecision = typeof routingDecisionsTable.$inferSelect;
 
 // ── Referrals ───────────────────────────────────────────────────────────────
 export const referralsTable = pgTable("referrals", {

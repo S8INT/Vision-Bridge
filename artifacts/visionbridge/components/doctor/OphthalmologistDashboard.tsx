@@ -19,7 +19,7 @@ type QueueItem = {
   title: string;
   subtitle: string;
   detail: string;
-  priority: "Emergency" | "Urgent" | "Routine";
+  priority: "Emergency" | "Urgent" | "High" | "Routine";
   timestamp: string;
   status: string;
 };
@@ -27,7 +27,8 @@ type QueueItem = {
 const priorityRank: Record<QueueItem["priority"], number> = {
   Emergency: 0,
   Urgent: 1,
-  Routine: 2,
+  High: 2,
+  Routine: 3,
 };
 
 function patientName(patients: ReturnType<typeof useApp>["patients"], patientId: string) {

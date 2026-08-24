@@ -17,14 +17,16 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, and, inArray, or } from "drizzle-orm";
+import { eq, and, inArray, or, ne } from "drizzle-orm";
 import {
   db, patientsTable, doctorsTable, screeningsTable, consultationsTable,
   referralsTable, appointmentsTable, campaignsTable, notificationsTable,
+  routingDecisionsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
 import { handleServerError, requireAuthContext, requireDb } from "../lib/http.js";
 import { notifyDoctorOfAssignment, notifyUserInBackground } from "../lib/notify.js";
+import { routeConsultation } from "../lib/routing.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -215,41 +217,89 @@ router.post("/patient-consult", async (req: Request, res: Response) => {
       return;
     }
 
-    // Auto-assign to least-loaded available doctor (round-robin, cross-tenant)
-    const availableDoctors = await db!.select().from(doctorsTable)
-      .where(eq(doctorsTable.isAvailable, true));
-
-    let assignedDoctor = availableDoctors.length > 0
-      ? availableDoctors.reduce((min, d) => (d.totalAssigned < min.totalAssigned ? d : min), availableDoctors[0])
-      : null;
-
-    // If a specific doctor was requested and they're available, prefer them
-    if (req.body.preferredDoctorId) {
-      const preferred = availableDoctors.find((d) => d.id === req.body.preferredDoctorId);
-      if (preferred) assignedDoctor = preferred;
+    const screening = req.body.screeningId
+      ? (await db!.select().from(screeningsTable).where(and(
+        eq(screeningsTable.id, req.body.screeningId),
+        eq(screeningsTable.patientId, patient.id),
+      )).limit(1))[0]
+      : undefined;
+    const prior = await db!.select({ assignedDoctorId: consultationsTable.assignedDoctorId })
+      .from(consultationsTable)
+      .where(and(eq(consultationsTable.patientId, patient.id), ne(consultationsTable.status, "Cancelled")));
+    const continuityDoctorId = prior.find((row) => row.assignedDoctorId)?.assignedDoctorId ?? undefined;
+    const doctors = await db!.select().from(doctorsTable).where(eq(doctorsTable.tenantId, patient.tenantId));
+    const openCases = await db!.select({
+      assignedDoctorId: consultationsTable.assignedDoctorId,
+    }).from(consultationsTable).where(and(
+      eq(consultationsTable.tenantId, patient.tenantId),
+      or(eq(consultationsTable.status, "Pending"), eq(consultationsTable.status, "Assigned"), eq(consultationsTable.status, "InReview")),
+    ));
+    const openCasesByDoctor = new Map<string, number>();
+    for (const row of openCases) if (row.assignedDoctorId) {
+      openCasesByDoctor.set(row.assignedDoctorId, (openCasesByDoctor.get(row.assignedDoctorId) ?? 0) + 1);
     }
+    const routing = routeConsultation({
+      consultation: {
+        consultationType: req.body.consultationType ?? (req.body.priority === "Emergency" ? "EMERGENCY" : "NEW_PATIENT"),
+        clinicalNotes: req.body.clinicalNotes ?? null,
+        priority: req.body.priority ?? "Routine",
+        preferredDoctorId: req.body.preferredDoctorId ?? null,
+      },
+      patient,
+      screening,
+      doctors,
+      openCasesByDoctor,
+      continuityDoctorId,
+    });
+    const consultationType = req.body.consultationType
+      ?? (req.body.priority === "Emergency" ? "EMERGENCY" : "NEW_PATIENT");
+    const assignedDoctor = routing.selected?.doctor ?? null;
+    const acknowledgementMinutes = routing.priority === "Emergency" ? 30 : routing.priority === "Urgent" ? 240 : 1440;
+    const dueAt = new Date(Date.now() + acknowledgementMinutes * 60_000);
 
     const values = {
       tenantId: patient.tenantId,
       patientId: patient.id,
       requestedBy: auth.sub,
       requestedAt: new Date(),
-      status: "Pending" as const,
-      priority: req.body.priority ?? "Routine",
+      status: assignedDoctor ? "Assigned" as const : "Pending" as const,
+      priority: routing.priority,
+      consultationType,
+      specialty: routing.specialty,
+      preferredDoctorId: req.body.preferredDoctorId ?? null,
+      routingStatus: assignedDoctor ? "ASSIGNED" as const : "SPECIALTY_QUEUE" as const,
+      routingReason: routing.reason,
+      routingScore: routing.selected?.score ?? null,
+      acknowledgementDueAt: dueAt,
       clinicalNotes: req.body.clinicalNotes ?? null,
       screeningId: req.body.screeningId ?? null,
       ...(assignedDoctor ? {
         assignedDoctorId: assignedDoctor.id,
         assignedTo: assignedDoctor.name,
         assignedAt: new Date(),
-        assignmentMethod: "RoundRobin" as const,
-        status: "Assigned" as const,
+        assignmentMethod: "Intelligent" as const,
       } : {}),
     };
 
     const [consultation] = await db!.insert(consultationsTable).values(values).returning();
 
-    // Increment doctor's totalAssigned counter
+    await db!.insert(routingDecisionsTable).values({
+      tenantId: patient.tenantId,
+      consultationId: consultation.id,
+      recommendedSpecialty: routing.specialty,
+      eligibleCandidates: routing.candidates.map((candidate) => ({
+        doctorId: candidate.doctor.id,
+        name: candidate.doctor.name,
+        score: candidate.score,
+        reasons: candidate.reasons,
+      })),
+      selectedClinicianId: assignedDoctor?.id ?? null,
+      routingScore: routing.selected?.score ?? null,
+      routingReason: routing.reason,
+      fallbackQueue: routing.fallbackQueue,
+    });
+
+    // Keep the existing assignment counter as a lightweight workload signal.
     if (assignedDoctor) {
       await db!.update(doctorsTable)
         .set({ totalAssigned: assignedDoctor.totalAssigned + 1 })
@@ -262,15 +312,25 @@ router.post("/patient-consult", async (req: Request, res: Response) => {
       type: "ConsultationUpdate",
       title: "Consultation Request Received",
       body: assignedDoctor
-        ? `Your request has been submitted and assigned to ${assignedDoctor.name}.`
-        : "Your request has been submitted. A specialist will respond shortly.",
+        ? `${assignedDoctor.name} has been assigned to your consultation.`
+        : `We're finding the right ${routing.specialty} specialist for you.`,
       read: false,
       createdAt: new Date(),
       patientId: patient.id,
       consultationId: consultation.id,
     });
 
-    res.status(201).json({ item: consultation, assignedDoctor: assignedDoctor ?? null });
+    res.status(201).json({
+      item: consultation,
+      assignedDoctor: assignedDoctor ?? null,
+      routing: {
+        specialty: routing.specialty,
+        status: assignedDoctor ? "ASSIGNED" : "SPECIALTY_QUEUE",
+        message: assignedDoctor
+          ? `${assignedDoctor.name} has been assigned to your consultation.`
+          : `We're finding the right ${routing.specialty} specialist for you.`,
+      },
+    });
 
     if (assignedDoctor?.userId) {
       notifyDoctorOfAssignment({
@@ -278,7 +338,7 @@ router.post("/patient-consult", async (req: Request, res: Response) => {
         doctorUserId: assignedDoctor.userId,
         tenantId: assignedDoctor.tenantId,
         patientName: `${patient.firstName} ${patient.lastName}`.trim(),
-        priority: req.body.priority ?? "Routine",
+        priority: routing.priority,
         consultationId: consultation.id,
         patientId: patient.id,
       });
@@ -287,6 +347,22 @@ router.post("/patient-consult", async (req: Request, res: Response) => {
     console.error("[clinical] patient-consult failed:", err);
     res.status(400).json({ error: "Failed to submit consultation request", detail: String(err) });
   }
+});
+
+// Routing transparency is available to authorized clinical users only.
+router.get("/consultations/:id/routing", async (req: Request, res: Response) => {
+  const auth = requireAuthContext(req, res);
+  if (!auth || !requireDb(res)) return;
+  if (!["Admin", "Doctor", "Technician"].includes(auth.role)) {
+    res.status(403).json({ error: "Only clinical users can view routing decisions" });
+    return;
+  }
+  const [decision] = await db!.select().from(routingDecisionsTable).where(and(
+    eq(routingDecisionsTable.consultationId, String(req.params.id)),
+    eq(routingDecisionsTable.tenantId, auth.tenantId),
+  )).limit(1);
+  if (!decision) { res.status(404).json({ error: "Routing decision not found" }); return; }
+  res.json({ item: decision });
 });
 
 // ── Wire entities ───────────────────────────────────────────────────────────

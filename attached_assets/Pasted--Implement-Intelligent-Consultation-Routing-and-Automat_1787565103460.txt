@@ -1,0 +1,1364 @@
+# Implement Intelligent Consultation Routing and Automated Care Workflow
+
+You are a **senior healthtech software architect and full-stack engineer** working inside an **existing teleophthalmology application in Replit**.
+
+The application already contains dashboards, authentication, patient records, clinician workflows, appointments, notifications, and a consultation/referral foundation.
+
+Your task is to **enhance the existing application**, not rebuild it.
+
+The goal is to replace the current **randomized “assign to any available specialist” workflow** with an **intelligent, automated consultation-routing system** that is seamless for patients, frontline clinicians, ophthalmologists, and administrators.
+
+## Core Product Principle
+
+The system should operate like this:
+
+> **Users create consultation requests. The platform determines the appropriate care pathway and automatically connects the request to the most appropriate qualified available specialist.**
+
+Randomized assignment may still be used, but **only as the final tie-breaker among equally eligible clinicians**.
+
+Do not force users to manually select an ophthalmologist unless necessary.
+
+---
+
+# 1. DO NOT REBUILD THE EXISTING APPLICATION
+
+Before making changes:
+
+1. Inspect the existing repository.
+2. Identify the current frontend framework.
+3. Identify existing dashboards.
+4. Identify patient models.
+5. Identify consultation/referral models.
+6. Identify appointment models.
+7. Identify clinician/specialist models.
+8. Identify availability/scheduling logic.
+9. Identify notification infrastructure.
+10. Identify authentication/authorization.
+11. Identify the current randomized queue/assignment implementation.
+12. Identify existing audit logging.
+
+Then extend the existing architecture.
+
+### Important
+
+Do not:
+
+* create duplicate patient models
+* create duplicate appointment systems
+* create duplicate notification systems
+* create duplicate dashboards
+* create a separate consultation application
+* replace functioning UI unnecessarily
+* break existing routes
+
+Reuse the current design system, API patterns, authentication and components wherever possible.
+
+---
+
+# 2. New Core Workflow
+
+Change the consultation workflow from:
+
+```text
+Consultation Request
+        ↓
+Randomly assign any available ophthalmologist
+```
+
+to:
+
+```text
+Consultation Request
+        ↓
+Clinical Triage
+        ↓
+Determine Care Pathway
+        ↓
+Determine Required Specialty
+        ↓
+Find Eligible Clinicians
+        ↓
+Apply Availability
+        ↓
+Apply Continuity of Care
+        ↓
+Apply Workload Balancing
+        ↓
+Apply Facility / Geographic Constraints
+        ↓
+Apply Patient Preference
+        ↓
+Select Highest-Ranking Candidate
+        ↓
+Randomized Tie-Breaker if Candidates Are Equivalent
+        ↓
+Assign Specialist
+        ↓
+Notify Specialist
+        ↓
+Notify Patient / Requester
+        ↓
+Consultation
+```
+
+The user should experience this as one seamless workflow.
+
+---
+
+# 3. Consultation Request
+
+Continue using the existing consultation-request concept.
+
+A request can originate from:
+
+### Patient
+
+From the patient dashboard:
+
+> Request Eye Consultation
+
+### Frontline Clinician
+
+From the existing patient record:
+
+> Request Ophthalmology Consultation
+
+The requesting user should **never need to determine the correct ophthalmologist manually in normal cases**.
+
+The request should capture:
+
+* patient
+* requester
+* consultation type
+* clinical concern
+* clinical question
+* urgency
+* symptoms
+* relevant existing records
+* imaging
+* investigations
+* preferred mode
+* preferred specialist, where applicable
+
+Use existing patient information automatically.
+
+Do not require clinicians to re-enter information that already exists in the patient record.
+
+---
+
+# 4. Consultation Types
+
+Support the existing consultation type concept, extending it if necessary:
+
+```text
+NEW_PATIENT
+SPECIALIST_REFERRAL
+FOLLOW_UP
+SECOND_OPINION
+REMOTE_IMAGE_REVIEW
+EMERGENCY
+```
+
+The routing engine should be able to use the consultation type as part of its decision-making.
+
+---
+
+# 5. Step 1 — Clinical Triage
+
+When a consultation request is submitted, create a triage stage.
+
+The triage engine should determine:
+
+### Priority
+
+* Emergency
+* Urgent
+* High
+* Routine
+
+### Suggested specialty
+
+Examples:
+
+* General Ophthalmology
+* Retina
+* Glaucoma
+* Cataract / Anterior Segment
+* Pediatric Ophthalmology
+* Neuro-ophthalmology
+* Cornea
+* Other configured specialties
+
+Do not present AI or rules-based triage as a medical diagnosis.
+
+The system is determining a **routing recommendation**, not replacing clinical judgment.
+
+---
+
+# 6. AI-Assisted Routing
+
+If an existing AI screening service is available, integrate its output into routing.
+
+Example:
+
+```text
+Fundus image
+      ↓
+AI screening
+      ↓
+Possible referable diabetic retinopathy
+      ↓
+Recommended pathway:
+Retina / General Ophthalmology
+      ↓
+Routing Engine
+```
+
+The routing engine may consider:
+
+* AI finding category
+* AI confidence
+* image quality
+* existing diagnosis
+* consultation type
+
+But AI output must remain **decision support**.
+
+The final clinical responsibility remains with the ophthalmologist.
+
+---
+
+# 7. Routing Engine
+
+Create or enhance a dedicated routing service/module.
+
+Conceptually:
+
+```text
+ConsultationRequest
+        ↓
+RoutingEngine
+        ↓
+RoutingDecision
+```
+
+The routing engine should determine:
+
+1. required specialty
+2. eligible clinicians
+3. available clinicians
+4. continuity preference
+5. workload score
+6. facility/geographic considerations
+7. patient preference
+8. final selected clinician
+9. fallback strategy
+
+---
+
+# 8. Eligibility Filtering
+
+Before scoring clinicians, eliminate anyone who should not receive the request.
+
+A clinician is eligible only if:
+
+* they are active
+* they have the required clinical role
+* they have the required specialty/capability
+* they are authorized to treat the patient/case
+* they are available under the relevant scheduling rules
+* they have not exceeded configured workload limits
+* they are not blocked/unavailable
+* they are not already the wrong specialist for the case
+
+Do not simply select from every ophthalmologist in the database.
+
+---
+
+# 9. Specialty Matching
+
+Specialty matching should be configurable.
+
+Example:
+
+```text
+Retina case
+    ↓
+Retina specialists
+    ↓
+If none available
+    ↓
+General ophthalmologist with retina capability
+    ↓
+If none available
+    ↓
+Regional / escalation queue
+```
+
+Do not hardcode a single specialty hierarchy into the UI.
+
+The backend should own the routing rules.
+
+---
+
+# 10. Continuity of Care
+
+This should have a high priority in assignment.
+
+Before choosing a new clinician, check:
+
+> Does this patient already have a relevant ophthalmologist?
+
+For example:
+
+```text
+Patient
+  ↓
+Primary ophthalmologist = Dr. Sarah
+  ↓
+Follow-up consultation
+```
+
+Prefer Dr. Sarah if:
+
+* she is still active
+* she is clinically appropriate
+* she is available within the required timeframe
+
+This should be configurable.
+
+Continuity should strongly influence assignment, especially for follow-ups.
+
+---
+
+# 11. Availability
+
+Use the existing scheduling/availability system if one exists.
+
+Do not create a duplicate availability table unnecessarily.
+
+Consider:
+
+* online/offline status
+* appointment schedule
+* working hours
+* leave
+* unavailable status
+* current consultation
+* maximum concurrent cases
+
+For urgent cases, prioritize clinicians who are actively available now.
+
+---
+
+# 12. Workload Balancing
+
+Among eligible clinicians, calculate workload.
+
+Potential metrics:
+
+* open consultation requests
+* pending reviews
+* active consultations
+* urgent cases
+* outstanding second opinions
+* recent workload
+
+Do not simply use total patient count.
+
+A clinician with 10 routine cases may be less overloaded than someone with 5 urgent cases.
+
+Create a configurable workload score.
+
+---
+
+# 13. Facility / Geographic Constraints
+
+Use location/facility where relevant.
+
+For remote consultation, geography should generally have lower weight.
+
+For consultations that may require physical referral or in-person care, proximity may become more important.
+
+Example:
+
+```text
+Rural patient
+   ↓
+Teleophthalmology review
+   ↓
+Remote specialist
+
+If physical referral required
+   ↓
+Nearest appropriate referral facility
+```
+
+Do not let geography override urgent clinical need.
+
+---
+
+# 14. Patient Preference
+
+Support patient preference when appropriate.
+
+For example:
+
+* preferred ophthalmologist
+* preferred facility
+* preferred appointment time
+
+However:
+
+> Patient preference must never force assignment to an unavailable or clinically inappropriate clinician.
+
+The routing engine should treat preference as one scoring factor.
+
+---
+
+# 15. Assignment Algorithm
+
+Implement a configurable weighted scoring model.
+
+Start with a sensible default such as:
+
+```text
+Specialty Match         30%
+Availability            25%
+Continuity of Care      20%
+Workload Balance        15%
+Facility/Geography      5%
+Patient Preference      5%
+```
+
+These values must be configurable.
+
+Do not hardcode them throughout the application.
+
+Create a central routing configuration.
+
+Example:
+
+```text
+ROUTING_WEIGHTS = {
+    specialty: 0.30,
+    availability: 0.25,
+    continuity: 0.20,
+    workload: 0.15,
+    geography: 0.05,
+    preference: 0.05
+}
+```
+
+---
+
+# 16. Preserve Randomized Assignment — But Change Its Role
+
+The existing randomized assignment behavior should **not simply be deleted**.
+
+Use it as a tie-breaker.
+
+Example:
+
+```text
+Eligible clinicians:
+
+Dr. A = 87 points
+Dr. B = 87 points
+Dr. C = 86 points
+Dr. D = 72 points
+
+Select from:
+Dr. A
+Dr. B
+
+Randomized tie-breaker
+        ↓
+Dr. B selected
+```
+
+This preserves fairness without making assignment arbitrary.
+
+The randomization must occur **after eligibility and ranking**, never before.
+
+---
+
+# 17. Routing Decision Object
+
+Create a persistent routing-decision record or equivalent audit structure.
+
+Conceptually:
+
+```text
+RoutingDecision
+
+id
+consultation_request_id
+
+recommended_specialty
+
+eligible_candidates
+
+selected_clinician
+
+routing_score
+
+routing_rules_version
+
+routing_reason
+
+created_at
+
+override
+override_reason
+
+overridden_by
+```
+
+The system should be able to answer:
+
+> **Why was this consultation assigned to Dr. Sarah?**
+
+Example explanation:
+
+```text
+Assigned to Dr. Sarah because:
+
+✓ Retina specialty match
+✓ Existing patient relationship
+✓ Currently available
+✓ Lower active workload than other eligible specialists
+```
+
+This is important for operational transparency and clinical governance.
+
+---
+
+# 18. Automated Assignment
+
+Once the routing engine selects a clinician:
+
+```text
+ConsultationRequest
+        ↓
+ASSIGNED
+        ↓
+Assigned clinician set
+        ↓
+Care relationship updated
+        ↓
+Notification generated
+        ↓
+Patient status updated
+        ↓
+Requester status updated
+        ↓
+Audit event recorded
+```
+
+No human should need to manually connect the request under normal circumstances.
+
+---
+
+# 19. Unassigned / Fallback Queue
+
+If there is no eligible clinician:
+
+```text
+Routing Engine
+      ↓
+No eligible clinician
+      ↓
+SPECIALTY QUEUE
+```
+
+The request should remain visible in a controlled queue.
+
+Example:
+
+```text
+RETINA QUEUE
+
+12 awaiting assignment
+
+No available specialist currently online.
+```
+
+A coordinator or authorized clinician can manually assign it.
+
+---
+
+# 20. Escalation System
+
+Do not let important requests silently remain in queues.
+
+Implement configurable Service-Level Agreements.
+
+Example:
+
+```text
+Emergency
+→ acknowledge within configured emergency SLA
+
+Urgent
+→ acknowledge within configured urgent SLA
+
+Routine
+→ acknowledge within configured routine SLA
+```
+
+When the SLA is exceeded:
+
+```text
+Assigned clinician
+        ↓
+No acknowledgement
+        ↓
+Escalation
+        ↓
+Next eligible specialist
+```
+
+If no specialist accepts:
+
+```text
+Escalation Queue
+        ↓
+Clinical Coordinator
+```
+
+Do not hardcode exact time limits unless existing product requirements already define them.
+
+Make them configurable.
+
+---
+
+# 21. Emergency Routing
+
+Emergency requests bypass normal routine workload balancing.
+
+Example:
+
+```text
+EMERGENCY CONSULTATION
+
+Sudden vision loss
+
+        ↓
+Immediately find qualified available clinician
+        ↓
+Notify immediately
+        ↓
+Require acknowledgement
+```
+
+If acknowledgement fails:
+
+```text
+Escalate
+   ↓
+Next eligible clinician
+   ↓
+Coordinator
+```
+
+Record every escalation.
+
+---
+
+# 22. Patient UX
+
+The patient should not see routing complexity.
+
+Patient flow:
+
+```text
+Request consultation
+       ↓
+Provide basic symptoms
+       ↓
+Upload optional information
+       ↓
+Submit
+       ↓
+Request received
+       ↓
+System finds appropriate clinician
+       ↓
+Specialist assigned
+       ↓
+Patient notified
+       ↓
+Consultation scheduled/reviewed
+```
+
+Use human-friendly status messages.
+
+For example:
+
+Instead of:
+
+> `ROUTING_IN_PROGRESS`
+
+show:
+
+> **We're finding the right eye specialist for you.**
+
+Instead of:
+
+> `ASSIGNED`
+
+show:
+
+> **Dr. Sarah has been assigned to your consultation.**
+
+---
+
+# 23. Frontline Clinician UX
+
+From the existing patient record:
+
+```text
+[Request Ophthalmology Consultation]
+```
+
+The clinician submits the request.
+
+Then show:
+
+```text
+Consultation requested
+
+Status:
+Finding an appropriate specialist
+
+Specialty:
+Retina
+
+Priority:
+High
+
+Expected response:
+[configured estimate]
+```
+
+Once assigned:
+
+```text
+Assigned specialist:
+Dr. Sarah
+
+Status:
+Awaiting specialist review
+```
+
+The clinician should not need to manually call/message the specialist to connect the case.
+
+---
+
+# 24. Ophthalmologist UX
+
+The ophthalmologist's existing dashboard should receive automatically routed cases.
+
+Create/enhance:
+
+## My Consultation Inbox
+
+Sections:
+
+* Urgent
+* New
+* Assigned to Me
+* Awaiting Information
+* Second Opinions
+* Follow-ups
+
+A new assignment should appear automatically.
+
+The ophthalmologist sees:
+
+```text
+NEW CONSULTATION
+
+Patient: Sarah Namukasa
+Type: Specialist Referral
+Priority: High
+
+Possible retinal disease
+
+Assigned because:
+• Retina specialty match
+• Existing patient relationship
+• Available now
+
+[Review Case]
+```
+
+The clinician should be able to:
+
+* accept
+* start consultation
+* request information
+* reassign
+* decline where permitted
+
+---
+
+# 25. Do Not Make Assignment Invisible to Clinicians
+
+Although the system automates assignment, clinicians should understand why a case reached them.
+
+Display a concise explanation such as:
+
+> **Why this case was assigned to you**
+
+This improves transparency and trust.
+
+Do not expose internal scoring details unnecessarily.
+
+A simple explanation is sufficient.
+
+---
+
+# 26. Event-Driven Workflow
+
+Use the application's existing event/notification architecture if available.
+
+The workflow should behave approximately like:
+
+```text
+CONSULTATION_REQUEST_CREATED
+        ↓
+ROUTING_STARTED
+        ↓
+ROUTING_COMPLETED
+        ↓
+SPECIALIST_ASSIGNED
+        ↓
+NOTIFICATIONS_TRIGGERED
+        ↓
+CONSULTATION_ACCEPTED
+        ↓
+CONSULTATION_STARTED
+        ↓
+CONSULTATION_COMPLETED
+```
+
+Each major event should update relevant users automatically.
+
+---
+
+# 27. Notifications
+
+Reuse the existing notification infrastructure.
+
+When a specialist is assigned:
+
+### Ophthalmologist
+
+> New high-priority consultation assigned to you.
+
+### Patient
+
+> An ophthalmologist has been assigned to your consultation.
+
+### Requesting clinician
+
+> Your consultation request has been accepted by Dr. Sarah.
+
+When information is requested:
+
+### Patient / Clinician
+
+> Additional information is required before the consultation can continue.
+
+When completed:
+
+> Your consultation has been completed. Please review your care plan.
+
+---
+
+# 28. Care-Team Integration
+
+When a specialist accepts a consultation:
+
+Do not automatically make them the patient's permanent primary ophthalmologist.
+
+Instead, represent the relationship appropriately:
+
+```text
+Primary Ophthalmologist
+Consulting Ophthalmologist
+Temporary Specialist
+```
+
+The consultation assignment should create the appropriate scoped relationship.
+
+Follow-up consultations can use that relationship to improve continuity.
+
+---
+
+# 29. Second Opinions
+
+Treat second opinions as the same consultation-request infrastructure.
+
+Example:
+
+```text
+ConsultationRequest
+type = SECOND_OPINION
+```
+
+Routing should prefer appropriate specialists.
+
+Do not automatically replace the current primary clinician.
+
+The original clinician should remain responsible for the patient's broader care unless explicitly transferred.
+
+---
+
+# 30. Audit Logging
+
+Record:
+
+* request created
+* routing started
+* routing decision
+* candidate clinicians
+* selected clinician
+* assignment
+* reassignment
+* escalation
+* acceptance
+* consultation start
+* consultation completion
+* manual override
+
+For manual overrides, record:
+
+```text
+who
+when
+reason
+previous clinician
+new clinician
+```
+
+---
+
+# 31. Manual Override
+
+Authorized coordinators/clinicians should be able to override automatic routing.
+
+Example:
+
+```text
+Automatically assigned:
+Dr. Sarah
+
+[Reassign]
+```
+
+If reassigning, capture:
+
+> Reason for reassignment
+
+Possible options:
+
+* Specialist unavailable
+* Patient requested another clinician
+* Clinical complexity
+* Facility requirement
+* Existing care relationship
+* Workload
+* Other
+
+The override should be audited.
+
+---
+
+# 32. Admin / Coordinator View
+
+Enhance the existing admin/clinical coordinator dashboard with routing visibility.
+
+Display:
+
+### Routing Health
+
+* Unassigned cases
+* Cases awaiting acknowledgement
+* SLA breaches
+* Emergency cases
+* Specialty queues
+* Clinician workload
+
+Do not expose unnecessary patient information to administrators.
+
+Respect existing privacy permissions.
+
+---
+
+# 33. Low-Resource Environment
+
+The routing system must work well even when connectivity is imperfect.
+
+Avoid:
+
+* excessive polling
+* large real-time payloads
+* loading entire specialist lists repeatedly
+* unnecessary image downloads
+
+Use:
+
+* efficient API requests
+* server-side filtering
+* pagination
+* retry mechanisms
+* event-driven updates where available
+* graceful stale/offline states
+
+---
+
+# 34. Backend Security
+
+Never trust the frontend to determine:
+
+* who can assign
+* who can receive
+* who can access
+* who can reassign
+* who can view the patient
+
+All routing and assignment authorization must be validated server-side.
+
+Before assigning a request, validate:
+
+```text
+Clinician active?
+Specialty appropriate?
+Correct role?
+Authorized?
+Available?
+Patient relationship?
+Facility rules?
+```
+
+---
+
+# 35. Testing Requirements
+
+Test the following scenarios.
+
+### Scenario 1 — Routine Request
+
+Patient creates request.
+
+Expected:
+
+```text
+Request
+→ specialty determination
+→ eligible clinicians
+→ ranked assignment
+→ notification
+```
+
+### Scenario 2 — Existing Relationship
+
+Patient already belongs to Dr. Sarah.
+
+Expected:
+
+> Dr. Sarah receives preference in routing.
+
+### Scenario 3 — No Specialist Available
+
+Expected:
+
+> Specialty queue.
+
+### Scenario 4 — Multiple Equivalent Specialists
+
+Expected:
+
+> Ranked candidates tie → randomized selection among tied candidates.
+
+### Scenario 5 — Emergency
+
+Expected:
+
+> Immediate qualified routing, acknowledgement requirement, escalation.
+
+### Scenario 6 — Specialist Does Not Acknowledge
+
+Expected:
+
+> SLA exceeded → escalation/reassignment.
+
+### Scenario 7 — Manual Reassignment
+
+Expected:
+
+> Audit record + notifications + updated assignment.
+
+### Scenario 8 — Unauthorized Clinician
+
+Expected:
+
+> Cannot access or manipulate the consultation.
+
+### Scenario 9 — Second Opinion
+
+Expected:
+
+> Route to suitable consultant without replacing primary clinician.
+
+### Scenario 10 — Follow-up
+
+Expected:
+
+> Strong continuity preference toward existing ophthalmologist.
+
+---
+
+# 36. Migration From Existing Randomized Queue
+
+This is important.
+
+Inspect the current randomized assignment implementation.
+
+Do not simply delete it.
+
+Refactor it into:
+
+```text
+Candidate Selection
+        ↓
+Eligibility Filtering
+        ↓
+Clinical Routing
+        ↓
+Scoring
+        ↓
+Tie-Breaker
+```
+
+The existing randomization should become the **last-stage tie-breaker**.
+
+This minimizes disruption to the current application.
+
+---
+
+# 37. Suggested Architecture
+
+Adapt this to the existing codebase.
+
+```text
+Consultation Request
+        ↓
+Triage Service
+        ↓
+Routing Service
+        ↓
+Candidate Resolver
+        ↓
+Eligibility Filter
+        ↓
+Scoring Engine
+        ↓
+Tie-Breaker
+        ↓
+Assignment Service
+        ↓
+Notification Service
+        ↓
+Audit Service
+```
+
+Keep these concerns separated.
+
+Do not place the entire routing algorithm inside a React component or controller.
+
+---
+
+# 38. Suggested Routing Functions
+
+Depending on the current backend:
+
+```text
+createConsultationRequest()
+
+triageConsultationRequest()
+
+determineRequiredSpecialty()
+
+getEligibleClinicians()
+
+calculateClinicianScore()
+
+rankCandidates()
+
+applyTieBreaker()
+
+assignConsultation()
+
+escalateConsultation()
+
+reassignConsultation()
+
+recordRoutingDecision()
+```
+
+Keep the implementation modular and testable.
+
+---
+
+# 39. Important Data Model Concept
+
+The system should distinguish:
+
+```text
+Requester
+Assigned Clinician
+Primary Clinician
+Consulting Clinician
+Care Team
+```
+
+Do not use one `doctor_id` field to represent all these concepts.
+
+A consultation request might look conceptually like:
+
+```text
+ConsultationRequest
+    patient_id
+    requester_id
+    assigned_clinician_id
+    consultation_type
+    specialty
+    priority
+    status
+    clinical_question
+```
+
+And the patient record should independently retain:
+
+```text
+PrimaryCareRelationship
+CareTeamMembership
+```
+
+---
+
+# 40. Final UX Principle
+
+The platform should feel intelligent without feeling magical.
+
+The user should never wonder:
+
+> “Who do I send this to?”
+
+Instead:
+
+### Patient
+
+> **Request care.**
+
+### Frontline clinician
+
+> **Request specialist review.**
+
+### Platform
+
+> **We'll find the appropriate specialist.**
+
+### Ophthalmologist
+
+> **You have been assigned a case appropriate to your specialty and availability.**
+
+### Coordinator
+
+> **You only need to intervene when automation cannot safely complete the workflow.**
+
+That is the target experience.
+
+---
+
+# 41. Final Deliverable
+
+Implement this workflow **inside the existing Replit application**.
+
+At completion:
+
+1. Preserve all functioning dashboards.
+2. Preserve current patient records.
+3. Preserve current appointments.
+4. Preserve current notification infrastructure.
+5. Replace arbitrary/random assignment with intelligent routing.
+6. Keep randomized selection only as a tie-breaker.
+7. Add specialty-aware routing.
+8. Add continuity-of-care preference.
+9. Add availability and workload scoring.
+10. Add emergency routing.
+11. Add escalation.
+12. Add routing transparency.
+13. Add manual override.
+14. Add auditability.
+15. Integrate the workflow into existing patient, clinician and ophthalmologist dashboards.
+16. Do not create duplicate workflows.
+17. Ensure authorization is enforced server-side.
+18. Test existing functionality for regressions.
+
+At the end, provide a concise implementation report containing:
+
+* Existing routing code discovered.
+* Files modified.
+* Files created.
+* Database changes.
+* API changes.
+* Routing algorithm implemented.
+* Existing functionality reused.
+* Current mock/stub functionality.
+* Tests performed.
+* Remaining work.
+
+## Success Criterion
+
+The implementation is successful when this entire journey works without users manually connecting the pieces:
+
+```text
+PATIENT / CLINICIAN
+        ↓
+CREATE CONSULTATION REQUEST
+        ↓
+AUTOMATED TRIAGE
+        ↓
+SPECIALTY DETERMINATION
+        ↓
+ELIGIBILITY FILTER
+        ↓
+SMART CLINICIAN RANKING
+        ↓
+CONTINUITY + AVAILABILITY + WORKLOAD
+        ↓
+RANDOMIZED TIE-BREAKER IF NECESSARY
+        ↓
+AUTOMATIC ASSIGNMENT
+        ↓
+NOTIFICATIONS
+        ↓
+OPHTHALMOLOGIST INBOX
+        ↓
+CONSULTATION
+        ↓
+DIAGNOSIS / PLAN
+        ↓
+FOLLOW-UP / REFERRAL / SECOND OPINION
+        ↓
+PATIENT + REQUESTER UPDATED
+        ↓
+LONGITUDINAL PATIENT TIMELINE
+```
+
+**Build this as an evolution of the existing platform—not as a new system.**

@@ -9,7 +9,7 @@
  *  - DICOM export wrapper retrieval
  */
 
-import * as FileSystem from "expo-file-system/legacy";
+import * as FileSystem from "expo-file-system";
 import { Platform } from "react-native";
 import offlineQueue, { QueueItem } from "./offlineQueue";
 import { fetchWithTimeout, UPLOAD_TIMEOUT_MS } from "../lib/fetchWithTimeout";
