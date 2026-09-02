@@ -25,6 +25,7 @@ import {
   authAuditLogTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
+import { seedClinicalDemoData } from "./clinicalSeed.js";
 
 // ── Types (kept identical to previous in-memory shape) ────────────────────────
 
@@ -218,6 +219,8 @@ export async function initAuthStore(): Promise<void> {
       tenantsById.set(DEMO_TENANT_ID, { id: DEMO_TENANT_ID, name: DEMO_TENANT_NAME, district: "Mbarara" });
       tenantsByName.set(DEMO_TENANT_NAME, tenantsById.get(DEMO_TENANT_ID)!);
       await hydrateCache(DEMO_TENANT_ID);
+      // Seed clinical demo data (idempotent — skips if data already exists)
+      await seedClinicalDemoData(DEMO_TENANT_ID);
       // Hydrate audit log (most recent 1000)
       const auditRows = await db.select().from(authAuditLogTable).limit(1000);
       for (const r of auditRows) auditLog.push(rowToAudit(r));

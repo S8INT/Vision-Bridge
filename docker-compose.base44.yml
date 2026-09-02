@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: vb
+      POSTGRES_PASSWORD: vb_dev
+      POSTGRES_DB: visionbridge
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vb"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  setup:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: sh -c "npm install -g pnpm@9 && pnpm install --no-frozen-lockfile"
+
+  db-migrate:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      DATABASE_URL: postgresql://vb:vb_dev@postgres:5432/visionbridge
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    command: sh -c "npm install -g pnpm@9 && pnpm --filter @workspace/db run push"
+
+  api:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      DATABASE_URL: postgresql://vb:vb_dev@postgres:5432/visionbridge
+      JWT_SECRET: visionbridge-dev-secret-change-in-production
+      PORT: "8080"
+      NODE_ENV: development
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    command: sh -c "npm install -g pnpm@9 && pnpm --filter @workspace/api-server run dev"
+    ports:
+      - "8000:8080"
+
+  web:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      EXPO_PUBLIC_API_URL: https://8000-${BASE44_PUBLIC_HOST_SUFFIX}
+      EXPO_OFFLINE: "1"
+      EXPO_NO_TELEMETRY: "1"
+      CHOKIDAR_USEPOLLING: "true"
+      BROWSER: "none"
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    command: sh -c "npm install -g pnpm@9 && cd artifacts/visionbridge && pnpm exec expo start --web --offline --port 3000"
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
