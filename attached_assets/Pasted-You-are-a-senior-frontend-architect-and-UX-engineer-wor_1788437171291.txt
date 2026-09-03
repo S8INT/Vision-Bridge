@@ -1,0 +1,950 @@
+You are a senior frontend architect and UX engineer working on an EXISTING teleophthalmology platform in Replit.
+
+TASK:
+Refactor the platform's existing navigation into ONE shared, role-aware navigation system.
+
+IMPORTANT:
+This is a refactor and UX enhancement, NOT a rebuild.
+
+Do not create:
+- PatientNav
+- ClinicianNav
+- OphthalmologistNav
+- AdminNav
+- separate navigation components for each role
+
+There must be ONE shared navigation component used across the entire platform.
+
+The navigation content, ordering, visibility, and destination must be determined dynamically from the authenticated user's permissions/capabilities.
+
+==================================================
+1. PRIMARY ARCHITECTURAL REQUIREMENT
+==================================================
+
+Implement this architecture:
+
+Authenticated User
+        ↓
+Roles / Permissions
+        ↓
+Navigation Configuration
+        ↓
+Navigation Resolver
+        ↓
+ONE Shared Navigation Component
+
+The component should render different navigation items depending on what the current user is authorized to access.
+
+The visual/navigation component itself must remain shared.
+
+DO NOT duplicate navigation markup or styling for different roles.
+
+==================================================
+2. INSPECT THE EXISTING APPLICATION FIRST
+==================================================
+
+Before modifying anything, inspect the repository and identify:
+
+- current navigation component(s)
+- current sidebar component(s)
+- current mobile/bottom navigation component(s)
+- routing system
+- authentication system
+- user role model
+- permissions/capabilities
+- current access-control logic
+- current dashboard layouts
+- icon library
+- design system/theme
+- responsive behavior
+
+Also identify all current navigation destinations and determine which are currently conditionally displayed based on role/access.
+
+Do not assume the architecture.
+
+Work with what already exists.
+
+==================================================
+3. PRESERVE EXISTING FUNCTIONALITY
+==================================================
+
+Do not break:
+
+- authentication
+- authorization
+- routing
+- protected routes
+- dashboards
+- patient records
+- consultations
+- referrals
+- messaging
+- analytics
+- settings
+- existing navigation destinations
+
+Do not rename existing routes unless absolutely necessary.
+
+Do not remove functionality.
+
+Do not create duplicate pages.
+
+Use existing routes.
+
+==================================================
+4. CORE NAVIGATION MODEL
+==================================================
+
+Create ONE navigation configuration that contains all possible navigation destinations.
+
+Conceptually:
+
+navigationConfig = [
+
+    {
+        id: "home",
+        label: "Home",
+        icon: ...,
+        route: "...",
+        section: "primary",
+        requiredPermissions: [...]
+    },
+
+    {
+        id: "patients",
+        label: "Patients",
+        icon: ...,
+        route: "...",
+        section: "primary",
+        requiredPermissions: [...]
+    },
+
+    {
+        id: "consultations",
+        label: "Consultations",
+        icon: ...,
+        route: "...",
+        section: "primary",
+        requiredPermissions: [...]
+    },
+
+    {
+        id: "messages",
+        label: "Messages",
+        icon: ...,
+        route: "...",
+        section: "primary",
+        requiredPermissions: [...]
+    },
+
+    {
+        id: "analytics",
+        label: "Analytics",
+        icon: ...,
+        route: "...",
+        section: "secondary",
+        requiredPermissions: [...]
+    },
+
+    ...
+]
+
+Adapt this structure to the existing framework and conventions.
+
+Do not copy this literally if an equivalent architecture already exists.
+
+==================================================
+5. NAVIGATION SECTIONS
+==================================================
+
+Every navigation item must belong to one of these categories:
+
+PRIMARY
+SECONDARY
+CONTEXTUAL
+
+PRIMARY:
+High-frequency destinations shown directly in the main navigation.
+
+SECONDARY:
+Less frequently used destinations shown inside "More" or the existing secondary navigation mechanism.
+
+CONTEXTUAL:
+Feature-specific destinations that should appear inside the relevant page/workspace and NOT in the global navigation.
+
+==================================================
+6. PRIMARY NAVIGATION LIMIT
+==================================================
+
+For mobile/bottom navigation:
+
+SHOW A MAXIMUM OF 5 PRIMARY ITEMS.
+
+Preferred structure:
+
+1. Home
+2. Patients / My Care
+3. Consultations
+4. Messages
+5. More
+
+Do not display more than 5 primary items on mobile.
+
+Do not solve overflow by truncating labels.
+
+If more functionality is available, place it under "More".
+
+==================================================
+7. ROLE-AWARE BEHAVIOR
+==================================================
+
+The same navigation component must adapt to the user's capabilities.
+
+Example:
+
+OPHTHALMOLOGIST:
+
+Home
+Patients
+Consultations
+Messages
+More
+
+More:
+- Referrals
+- Second Opinions
+- Follow-ups
+- Care Teams
+- Analytics
+- Reports
+- Notifications
+- Profile
+- Settings
+
+CLINICIAN:
+
+Home
+Patients
+Consultations
+Messages
+More
+
+More:
+- Referrals
+- Reports
+- Notifications
+- Profile
+- Settings
+
+PATIENT:
+
+Home
+My Care
+Consultations
+Messages
+More
+
+More:
+- Medical Records
+- Prescriptions
+- Reports
+- Notifications
+- Profile
+- Settings
+
+ADMINISTRATOR:
+
+Use the existing administrator workflow and permissions.
+
+IMPORTANT:
+These are examples, not hardcoded requirements.
+
+Derive actual visibility from the application's existing permissions/access-control system.
+
+==================================================
+8. DO NOT USE ROLE CHECKS EVERYWHERE
+==================================================
+
+Avoid code such as:
+
+if (role === "ophthalmologist") ...
+if (role === "patient") ...
+if (role === "nurse") ...
+
+inside the navigation UI wherever possible.
+
+Prefer capability/permission-based filtering.
+
+Conceptually:
+
+can("patients.view")
+can("consultations.view")
+can("analytics.view")
+can("messages.view")
+
+The navigation resolver should determine which destinations the user can access.
+
+If the existing application only has role-based permissions, create a thin abstraction over that system rather than rewriting authorization.
+
+==================================================
+9. NAVIGATION RESOLVER
+==================================================
+
+Create one centralized function/hook/service responsible for transforming:
+
+ALL NAVIGATION ITEMS
++
+CURRENT USER PERMISSIONS
++
+CURRENT CONTEXT
+
+into:
+
+VISIBLE PRIMARY ITEMS
+VISIBLE SECONDARY ITEMS
+VISIBLE CONTEXTUAL ITEMS
+
+Conceptually:
+
+resolveNavigation(user, context)
+
+returns:
+
+{
+    primary: [...],
+    secondary: [...],
+    contextual: [...]
+}
+
+Do not perform permission logic separately inside every navigation item.
+
+Keep permission resolution centralized.
+
+==================================================
+10. NAVIGATION PRIORITY
+==================================================
+
+Navigation visibility and ordering should NOT simply be:
+
+"show every feature the user can access."
+
+Instead, each item should have a priority/category.
+
+For example:
+
+primary
+secondary
+contextual
+
+Within primary, define an explicit order.
+
+Example:
+
+Home
+Patients
+Consultations
+Messages
+More
+
+Do not sort alphabetically.
+
+Do not sort based purely on route names.
+
+The ordering should represent workflow importance.
+
+==================================================
+11. CONTEXTUAL NAVIGATION
+==================================================
+
+Do NOT promote every feature into the global navigation.
+
+For example, an ophthalmologist may have:
+
+- Images
+- AI Analysis
+- Investigations
+- Timeline
+- Care Team
+- Diagnosis
+- Treatment
+- Referral
+- Second Opinion
+
+These should generally remain inside the patient/consultation workspace.
+
+They should NOT become global bottom-navigation tabs.
+
+Use contextual navigation inside the relevant patient/consultation screen.
+
+Example:
+
+Patient Workspace
+
+Overview | History | Images | Investigations | AI Analysis | Timeline
+
+Global navigation remains:
+
+Home | Patients | Consultations | Messages | More
+
+==================================================
+12. "MORE" MENU
+==================================================
+
+Create or enhance the existing "More" destination.
+
+More should expose secondary navigation items grouped logically.
+
+Example:
+
+MORE
+
+Clinical
+- Referrals
+- Second Opinions
+- Follow-ups
+- Care Teams
+- Analytics
+- Reports
+
+Account
+- Profile
+- Settings
+
+System
+- Notifications
+- Help
+- Support
+
+Only display items the user has permission to access.
+
+Do not display empty categories.
+
+If no secondary items are available, handle this gracefully rather than showing an empty menu.
+
+==================================================
+13. ONE SHARED COMPONENT
+==================================================
+
+Create/retain exactly ONE reusable navigation component.
+
+Conceptually:
+
+<AppNavigation />
+
+The same component must be used across:
+
+- patient dashboard
+- clinician dashboard
+- ophthalmologist dashboard
+- admin dashboard
+- other authenticated application areas
+
+The component receives user/context information from the existing application rather than having separate copies.
+
+==================================================
+14. RESPONSIVE DESIGN
+==================================================
+
+Use the SAME navigation architecture across screen sizes.
+
+Mobile:
+- bottom navigation
+- maximum 5 primary destinations
+- More contains secondary items
+
+Tablet:
+- adapt layout appropriately
+
+Desktop:
+- use the existing sidebar/navigation layout if already present
+
+IMPORTANT:
+
+The underlying navigation configuration must remain the same.
+
+Only presentation should change based on viewport.
+
+Do NOT create separate navigation business logic for desktop and mobile.
+
+==================================================
+15. VISUAL REDESIGN
+==================================================
+
+Fix the current UI problem shown in the existing application where navigation labels appear truncated and visually disorganized.
+
+The new navigation must have:
+
+- equal-width primary navigation items
+- consistent icon size
+- consistent icon style
+- consistent label placement
+- full label visibility
+- aligned icons
+- balanced spacing
+- consistent active state
+- accessible touch targets
+- responsive behavior
+
+For mobile, use an equal-width layout.
+
+Prefer:
+
+display: grid;
+grid-template-columns: repeat(5, minmax(0, 1fr));
+
+or the equivalent implementation in the existing styling system.
+
+Do NOT use arbitrary margins to position items.
+
+Do NOT use absolute positioning for individual navigation items.
+
+==================================================
+16. LABEL RULE
+==================================================
+
+Navigation labels must NEVER visually become:
+
+D...
+P...
+C...
+A...
+M...
+
+Do not hide labels.
+
+Do not rely on ellipsis.
+
+Use short labels where necessary.
+
+Examples:
+
+Home
+Patients
+Consultations
+Messages
+More
+
+If a label does not fit, fix the layout rather than truncating the text.
+
+==================================================
+17. ACTIVE STATE
+==================================================
+
+Implement a consistent active-state system based on the current route.
+
+Active state should include:
+
+- stronger icon emphasis
+- stronger label emphasis
+- subtle accent treatment
+- accessible visual indicator
+
+Do not make active icons dramatically larger.
+
+Do not use excessive animations.
+
+Do not depend on color alone.
+
+Nested routes must correctly activate the relevant parent navigation item.
+
+Example:
+
+/patients/123
+→ Patients is active
+
+/consultations/456
+→ Consultations is active
+
+==================================================
+18. BADGES
+==================================================
+
+If the existing system supports notifications/counts, allow navigation items to display badges.
+
+Examples:
+
+Consultations [3]
+Messages [2]
+
+Use existing notification/query infrastructure.
+
+Do not create a new notification system.
+
+Only show badges for actionable information.
+
+==================================================
+19. SECURITY / ACCESS CONTROL
+==================================================
+
+Hiding a navigation item is NOT authorization.
+
+The existing backend/API authorization must remain the source of truth.
+
+The navigation should only reflect permissions.
+
+A user must not gain access simply by manually navigating to a hidden route.
+
+Do not weaken existing backend authorization.
+
+If any route currently lacks proper authorization, identify it rather than silently implementing client-side protection only.
+
+==================================================
+20. MULTI-ROLE USERS
+==================================================
+
+The system may eventually support users with multiple roles/capabilities.
+
+Do NOT assume:
+
+one user = one role.
+
+The navigation should be derived from the user's effective permissions/capabilities.
+
+If a user has both:
+
+ophthalmologist
++
+administrator
+
+show navigation appropriate to the combined permissions, while avoiding duplicates.
+
+Deduplicate navigation items by stable item ID.
+
+==================================================
+21. NAVIGATION CONFIGURATION
+==================================================
+
+Every navigation destination should have a stable ID.
+
+Example:
+
+home
+patients
+consultations
+messages
+analytics
+referrals
+settings
+
+Do not use visible labels as identifiers.
+
+This makes the navigation easier to maintain and localize later.
+
+==================================================
+22. EXISTING DESIGN SYSTEM
+==================================================
+
+Reuse the application's existing:
+
+- colors
+- typography
+- spacing
+- border radius
+- icon library
+- buttons
+- badges
+- menu components
+- drawer components
+
+Do not introduce a new UI framework or icon library unless absolutely necessary.
+
+The navigation should look native to the existing application.
+
+==================================================
+23. PERFORMANCE
+==================================================
+
+The global navigation appears throughout the application.
+
+Keep it lightweight.
+
+Do not:
+
+- fetch full patient lists
+- fetch large datasets
+- perform expensive calculations
+- repeatedly request user information
+
+Use already available authentication/session data.
+
+For notification badges, reuse existing cached/query state where possible.
+
+==================================================
+24. ACCESSIBILITY
+==================================================
+
+Ensure:
+
+- semantic navigation markup
+- accessible labels
+- minimum ~44px touch target
+- visible focus state
+- keyboard support where relevant
+- screen-reader-friendly labels
+- active route announced appropriately
+- sufficient contrast
+- color-independent active status
+
+Icons must not be the only semantic indicator.
+
+==================================================
+25. SAFE AREA / MOBILE
+==================================================
+
+For fixed bottom navigation, respect device safe areas.
+
+Use the appropriate equivalent of:
+
+padding-bottom: env(safe-area-inset-bottom)
+
+and ensure page content has sufficient bottom padding so the navigation never covers content.
+
+Test on narrow mobile dimensions.
+
+==================================================
+26. MORE MENU BEHAVIOR
+==================================================
+
+"More" should open the existing drawer/menu pattern if one exists.
+
+Do not navigate to a blank More page unless that is already the application's established pattern.
+
+The More menu should:
+
+- open quickly
+- group items
+- show icons consistently
+- respect permissions
+- show active state for currently selected secondary pages
+- close correctly
+- work on keyboard/mobile where applicable
+
+==================================================
+27. DO NOT MODIFY BUSINESS LOGIC
+==================================================
+
+Do not alter:
+
+- consultation routing
+- patient assignment
+- clinical workflows
+- medical data
+- AI logic
+- referral logic
+- appointment logic
+
+This task is strictly navigation architecture + UX organization + responsive presentation.
+
+==================================================
+28. IMPLEMENTATION PROCESS
+==================================================
+
+Follow this exact sequence:
+
+STEP 1:
+Inspect the current navigation implementation.
+
+STEP 2:
+Map all current navigation destinations.
+
+STEP 3:
+Map each destination to its existing permission/access rule.
+
+STEP 4:
+Identify duplicate navigation components, if any.
+
+STEP 5:
+Create a single navigation configuration.
+
+STEP 6:
+Create a centralized navigation resolver.
+
+STEP 7:
+Refactor the existing shared navigation component to consume the resolved configuration.
+
+STEP 8:
+Organize items into:
+- primary
+- secondary
+- contextual
+
+STEP 9:
+Limit mobile primary navigation to 5 items.
+
+STEP 10:
+Move secondary items into More.
+
+STEP 11:
+Fix layout, spacing, truncation, active state, badges, and responsiveness.
+
+STEP 12:
+Verify all existing routes and permissions still work.
+
+==================================================
+29. TEST THESE USER TYPES
+==================================================
+
+Test at minimum:
+
+Patient
+Clinician
+Ophthalmologist
+Administrator
+
+For each user:
+
+- correct items are visible
+- unauthorized items are hidden
+- primary order is logical
+- More contains appropriate secondary items
+- no duplicate items
+- active state works
+- routes work
+
+Also test a user with multiple roles if supported.
+
+==================================================
+30. TEST THESE ROUTES
+==================================================
+
+Test representative routes such as:
+
+/dashboard
+/patients
+/patients/:id
+/consultations
+/consultations/:id
+/messages
+/analytics
+/settings
+
+Use the actual route structure discovered in the project.
+
+Verify nested routes correctly highlight their parent navigation item.
+
+==================================================
+31. REGRESSION TEST
+==================================================
+
+After implementation verify:
+
+- login still works
+- logout still works
+- protected routes remain protected
+- patient dashboard works
+- clinician dashboard works
+- ophthalmologist dashboard works
+- admin dashboard works
+- navigation works on mobile
+- navigation works on desktop
+- existing notifications still work
+- existing More/menus still work
+- no console errors
+- no broken imports
+- no broken routes
+
+==================================================
+32. IMPORTANT: DO NOT CREATE ROLE-SPECIFIC NAVIGATION COMPONENTS
+==================================================
+
+This is non-negotiable.
+
+DO NOT create:
+
+PatientNavigation.tsx
+ClinicianNavigation.tsx
+OphthalmologistNavigation.tsx
+AdminNavigation.tsx
+
+Instead create/retain:
+
+Navigation.tsx
+
+and, if appropriate:
+
+navigationConfig.ts
+navigationResolver.ts
+useNavigation.ts
+
+Use the existing project naming conventions where they differ.
+
+==================================================
+33. TARGET ARCHITECTURE
+==================================================
+
+The final implementation should conceptually look like:
+
+                    AUTHENTICATED USER
+                           ↓
+                  USER PERMISSIONS
+                           ↓
+                 NAVIGATION CONFIG
+                           ↓
+                NAVIGATION RESOLVER
+                           ↓
+              ┌────────────┴────────────┐
+              ↓                         ↓
+         PRIMARY ITEMS             SECONDARY ITEMS
+              ↓                         ↓
+       SHARED NAVIGATION              MORE
+              ↓
+       MOBILE / DESKTOP
+       PRESENTATION LAYER
+
+Contextual navigation remains inside the relevant feature/page.
+
+==================================================
+34. SUCCESS CRITERIA
+==================================================
+
+The implementation is successful when:
+
+1. There is ONE shared navigation component.
+2. Navigation visibility is permission-aware.
+3. Navigation ordering is intentional.
+4. Mobile shows no more than 5 primary destinations.
+5. Secondary features are organized under More.
+6. Contextual features are not promoted to global navigation.
+7. Labels never truncate.
+8. Navigation is visually balanced.
+9. Existing routes continue working.
+10. Existing authorization remains intact.
+11. Different user types receive different navigation experiences through configuration, NOT separate components.
+12. Multi-role users are handled without duplicated items.
+13. The architecture can easily accommodate new roles/features later.
+
+==================================================
+35. FINAL RESPONSE FROM THE AGENT
+==================================================
+
+After implementation, report:
+
+1. Current navigation architecture discovered.
+2. Root cause of the previous navigation layout problem.
+3. Shared navigation component used.
+4. Navigation configuration created/modified.
+5. Permission logic reused.
+6. Navigation resolver created/modified.
+7. Primary items for each major user type.
+8. Secondary items moved into More.
+9. Responsive changes.
+10. Files modified.
+11. Files created.
+12. Routes preserved.
+13. Tests performed.
+14. Any remaining issues.
+
+Do not provide a generic summary.
+
+Be specific about what was actually changed in the repository.
+
+FINAL PRINCIPLE:
+
+"One navigation component. Many navigation experiences."
+
+Share the component.
+Specialize the configuration.
+Centralize permission resolution.
+Keep primary navigation focused.
+Keep feature-specific actions contextual.
+Do not duplicate navigation systems.

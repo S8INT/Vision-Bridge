@@ -1,60 +1,78 @@
 /**
- * Per-role bottom navigation structure.
+ * Shared navigation catalog and resolver.
  *
- * TAB_VISIBILITY (RBAC — which screens a role may access) stays the single
- * source of truth for access. NAV decides *placement*: which permitted
- * screens appear as bottom tabs (max 5 incl. "More") and which move into
- * the More hub. Every permitted screen is either a tab or a More row.
+ * The catalog is the single source of truth for labels, icons, ordering and
+ * placement. Access is resolved here from the authenticated user's effective
+ * permissions, so the navigation component stays role-agnostic.
  */
-import type { UserRole } from "@/context/AuthContext";
+import type { Permission, UserRole } from "@/context/AuthContext";
 
-// Based on 5.3 RBAC Permission Matrix (VisionBridge UG v1.0) + Patient flow
-export const TAB_VISIBILITY: Record<UserRole, Record<string, boolean>> = {
-  Admin:      { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: true,  notifications: true,  visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
-  Doctor:     { index: true, patients: true,  consultations: true,  analytics: true,  campaigns: false, notifications: true,  visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
-  Technician: { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: true,  visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
-  CHW:        { index: true, patients: true,  consultations: false, analytics: false, campaigns: true,  notifications: false, visits: false, reports: false, education: false, "my-consultations": false, queue: true  },
-  Viewer:     { index: true, patients: false, consultations: false, analytics: true,  campaigns: false, notifications: false, visits: false, reports: false, education: false, "my-consultations": false, queue: false },
-  Patient:    { index: true, patients: false, consultations: false, analytics: false, campaigns: false, notifications: true,  visits: true,  reports: true,  education: true,  "my-consultations": true,  queue: false },
-};
+type Capability = { resource: string; action: string };
+export type NavigationPlacement = "primary" | "secondary" | "contextual";
 
-export interface ScreenMeta {
-  title: string;
+export interface NavigationItem {
+  id: string;
+  route: string;
+  label: string;
   description: string;
   sf: string;
   sfSelected: string;
   feather: string;
-  /** Section header used when the screen appears in the More hub. */
   section: string;
+  placement: NavigationPlacement;
+  capabilities?: Capability[];
+  roles?: UserRole[];
 }
 
-export const SCREEN_META: Record<string, ScreenMeta> = {
-  index:              { title: "Dashboard", description: "Overview and quick actions",              sf: "house",                 sfSelected: "house.fill",                 feather: "home",           section: "Workspace" },
-  patients:           { title: "Patients",  description: "Register and manage patients",           sf: "person.2",              sfSelected: "person.2.fill",              feather: "users",          section: "Workspace" },
-  visits:             { title: "Visits",    description: "Your appointments and visits",           sf: "calendar",              sfSelected: "calendar",                   feather: "calendar",       section: "My care" },
-  consultations:      { title: "Consults",  description: "Teleconsultation requests and reviews",  sf: "message.circle",        sfSelected: "message.circle.fill",        feather: "message-circle", section: "Workspace" },
-  "my-consultations": { title: "Consults",  description: "Your consultation history",              sf: "message.circle",        sfSelected: "message.circle.fill",        feather: "message-circle", section: "My care" },
-  reports:            { title: "Reports",   description: "Your screening results and reports",     sf: "doc.text",              sfSelected: "doc.text.fill",              feather: "file-text",      section: "My care" },
-  education:          { title: "Learn",     description: "Eye health education materials",         sf: "book",                  sfSelected: "book.fill",                  feather: "book-open",      section: "Resources" },
-  campaigns:          { title: "Campaigns", description: "Outreach and screening campaigns",       sf: "map",                   sfSelected: "map.fill",                   feather: "map-pin",        section: "Outreach" },
-  analytics:          { title: "Analytics", description: "Program metrics and trends",             sf: "chart.bar",             sfSelected: "chart.bar.fill",             feather: "bar-chart-2",    section: "Insights" },
-  queue:              { title: "Upload Queue", description: "Images waiting to upload",            sf: "icloud.and.arrow.up",   sfSelected: "icloud.and.arrow.up.fill",   feather: "upload-cloud",   section: "Data & sync" },
-  notifications:      { title: "Alerts",    description: "Notifications and updates",              sf: "bell",                  sfSelected: "bell.fill",                  feather: "bell",           section: "Updates" },
-};
-
 /**
- * Placement per role. `tabs` = bottom tab bar (Home first, ordered by daily
- * frequency); everything else the role can access goes into the More hub.
- * Roles whose permitted screens all fit within 5 tabs get no More tab.
+ * All global destinations. Patient/consultation workspaces keep their
+ * image, AI, timeline and care-plan actions contextual to those screens.
  */
-const NAV_PLACEMENT: Record<UserRole, { tabs: string[]; more: string[] }> = {
-  Admin:      { tabs: ["index", "patients", "consultations", "analytics"],          more: ["campaigns", "queue", "notifications"] },
-  Doctor:     { tabs: ["index", "patients", "consultations", "analytics"],          more: ["queue", "notifications"] },
-  Technician: { tabs: ["index", "patients", "campaigns", "queue", "notifications"], more: [] },
-  CHW:        { tabs: ["index", "patients", "campaigns", "queue"],                  more: [] },
-  Viewer:     { tabs: ["index", "analytics"],                                       more: [] },
-  Patient:    { tabs: ["index", "visits", "my-consultations", "notifications"],     more: ["reports", "education"] },
-};
+export const NAVIGATION_ITEMS: NavigationItem[] = [
+  { id: "home", route: "index", label: "Home", description: "Overview and quick actions", sf: "house", sfSelected: "house.fill", feather: "home", section: "Workspace", placement: "primary" },
+  { id: "patients", route: "patients", label: "Patients", description: "Register and manage patients", sf: "person.2", sfSelected: "person.2.fill", feather: "users", section: "Workspace", placement: "primary", capabilities: [{ resource: "patient", action: "list" }] },
+  { id: "consultations", route: "consultations", label: "Consults", description: "Teleconsultation requests and reviews", sf: "message.circle", sfSelected: "message.circle.fill", feather: "message-circle", section: "Workspace", placement: "primary", capabilities: [{ resource: "consultation", action: "list" }] },
+  { id: "visits", route: "visits", label: "Visits", description: "Your appointments and visits", sf: "calendar", sfSelected: "calendar", feather: "calendar", section: "My care", placement: "primary", capabilities: [{ resource: "consultation", action: "list" }], roles: ["Patient"] },
+  { id: "my-consultations", route: "my-consultations", label: "Consults", description: "Your consultation history", sf: "message.circle", sfSelected: "message.circle.fill", feather: "message-circle", section: "My care", placement: "primary", capabilities: [{ resource: "consultation", action: "list" }], roles: ["Patient"] },
+  { id: "analytics", route: "analytics", label: "Insights", description: "Program metrics and trends", sf: "chart.bar", sfSelected: "chart.bar.fill", feather: "bar-chart-2", section: "Insights", placement: "secondary", capabilities: [{ resource: "analytics", action: "view" }] },
+  { id: "campaigns", route: "campaigns", label: "Campaigns", description: "Outreach and screening campaigns", sf: "map", sfSelected: "map.fill", feather: "map-pin", section: "Outreach", placement: "primary", roles: ["Admin", "Technician", "CHW"] },
+  { id: "notifications", route: "notifications", label: "Alerts", description: "Notifications and updates", sf: "bell", sfSelected: "bell.fill", feather: "bell", section: "Updates", placement: "primary", roles: ["Admin", "Doctor", "Technician", "Patient"] },
+  { id: "queue", route: "queue", label: "Upload Queue", description: "Images waiting to upload", sf: "icloud.and.arrow.up", sfSelected: "icloud.and.arrow.up.fill", feather: "upload-cloud", section: "Data & sync", placement: "secondary", roles: ["Admin", "Doctor", "Technician", "CHW"] },
+  { id: "reports", route: "reports", label: "Reports", description: "Your screening results and reports", sf: "doc.text", sfSelected: "doc.text.fill", feather: "file-text", section: "My care", placement: "secondary", roles: ["Patient"] },
+  { id: "education", route: "education", label: "Learn", description: "Eye health education materials", sf: "book", sfSelected: "book.fill", feather: "book-open", section: "Resources", placement: "secondary", roles: ["Patient"] },
+];
+
+export type ScreenMeta = NavigationItem;
+export const SCREEN_META: Record<string, ScreenMeta> = Object.fromEntries(
+  NAVIGATION_ITEMS.map((item) => [item.route, item]),
+) as Record<string, ScreenMeta>;
+
+function isAllowed(item: NavigationItem, role: UserRole, permissions: Permission | null): boolean {
+  if (item.roles && !item.roles.includes(role)) return false;
+  if (!item.capabilities?.length) return true;
+  return item.capabilities.some(({ resource, action }) => permissions?.[resource]?.[action] === true);
+}
+
+export interface ResolvedNavigation {
+  primary: NavigationItem[];
+  secondary: NavigationItem[];
+  contextual: NavigationItem[];
+}
+
+/** Resolve visibility and preserve intentional workflow ordering. */
+export function resolveNavigation(role: UserRole, permissions: Permission | null): ResolvedNavigation {
+  const visible = NAVIGATION_ITEMS.filter((item) => isAllowed(item, role, permissions));
+  const visiblePrimary = visible.filter((item) => item.placement === "primary");
+  const overflowPrimary = visiblePrimary.slice(4);
+  return {
+    // Four direct destinations leave the fifth slot for More when needed.
+    primary: visiblePrimary.slice(0, 4),
+    // Never strand a permitted destination when a role has more than four
+    // high-frequency items; overflow becomes a normal More row.
+    secondary: [...overflowPrimary, ...visible.filter((item) => item.placement === "secondary")],
+    contextual: visible.filter((item) => item.placement === "contextual"),
+  };
+}
 
 export interface RoleNav {
   tabs: string[];
@@ -62,24 +80,14 @@ export interface RoleNav {
   hasMore: boolean;
 }
 
-/** Resolve placement for a role, safety-filtered against RBAC visibility. */
+/** Compatibility helper for existing consumers that only have a role. */
 export function getRoleNav(role: UserRole): RoleNav {
-  const vis = TAB_VISIBILITY[role] ?? {};
-  const placement = NAV_PLACEMENT[role] ?? { tabs: ["index"], more: [] };
-  const tabs = placement.tabs.filter((k) => vis[k]);
-  const inTabs = new Set(tabs);
-  // Any permitted screen not placed as a tab must be reachable via More.
-  const more = Object.keys(vis).filter((k) => vis[k] && !inTabs.has(k));
-  // Preserve intended ordering for More rows.
-  const orderedMore = [
-    ...placement.more.filter((k) => more.includes(k)),
-    ...more.filter((k) => !placement.more.includes(k)),
-  ];
-  return { tabs, more: orderedMore, hasMore: orderedMore.length > 0 };
+  const resolved = resolveNavigation(role, null);
+  const tabs = resolved.primary.map((item) => item.route);
+  const more = [...resolved.secondary, ...resolved.contextual].map((item) => item.route);
+  return { tabs, more, hasMore: more.length > 0 };
 }
 
-/** Screen title, honoring the Patient-facing "Home" label for index. */
-export function screenTitle(key: string, role: UserRole): string {
-  if (key === "index") return role === "Patient" ? "Home" : "Dashboard";
-  return SCREEN_META[key]?.title ?? key;
+export function screenTitle(key: string, _role: UserRole): string {
+  return SCREEN_META[key]?.label ?? key;
 }

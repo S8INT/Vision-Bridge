@@ -57,9 +57,17 @@ router.get("/bootstrap", async (req: Request, res: Response) => {
         )
         : [];
       const assignedPatientIds = assigned.map((item) => item.patientId);
-      const relatedPatientIds = assignedPatientIds.length > 0
-        ? assignedPatientIds
-        : [];
+      // A clinician-created patient has no consultation yet, so include
+      // records registered by this Doctor in their own workspace as well.
+      // This keeps the patient visible after a successful registration while
+      // preserving the tenant and assignment scope for the rest of the data.
+      const registeredPatients = await db!.select({ id: patientsTable.id }).from(patientsTable).where(
+        and(eq(patientsTable.tenantId, tid), eq(patientsTable.registeredBy, auth.sub)),
+      );
+      const relatedPatientIds = [...new Set([
+        ...assignedPatientIds,
+        ...registeredPatients.map((patient) => patient.id),
+      ])];
 
       patients = relatedPatientIds.length > 0
         ? await db!.select().from(patientsTable).where(

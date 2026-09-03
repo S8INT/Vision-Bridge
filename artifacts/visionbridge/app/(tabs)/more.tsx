@@ -15,7 +15,7 @@ import { useColors } from "@/hooks/useColors";
 import { useApp } from "@/context/AppContext";
 import { useAuth, type UserRole } from "@/context/AuthContext";
 import { useQueueAttention } from "@/hooks/useQueueAttention";
-import { getRoleNav, SCREEN_META, screenTitle } from "@/lib/navConfig";
+import { resolveNavigation, screenTitle } from "@/lib/navConfig";
 
 interface Row {
   key: string;
@@ -34,26 +34,26 @@ export default function MoreScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
   const { unreadCount } = useApp();
   const role: UserRole = user?.role ?? "Viewer";
-  const nav = getRoleNav(role);
-  const queueCount = useQueueAttention(nav.more.includes("queue"));
+  const resolved = resolveNavigation(role, permissions);
+  const moreItems = [...resolved.secondary, ...resolved.contextual];
+  const queueCount = useQueueAttention(moreItems.some((item) => item.route === "queue"));
 
   const sections: Section[] = [];
-  for (const key of nav.more) {
-    const meta = SCREEN_META[key];
+  for (const item of moreItems) {
     let badge = 0;
-    if (key === "notifications") badge = unreadCount;
-    if (key === "queue") badge = queueCount;
+    if (item.route === "notifications") badge = unreadCount;
+    if (item.route === "queue") badge = queueCount;
     const row: Row = {
-      key,
-      title: screenTitle(key, role),
-      description: meta?.description ?? "",
-      icon: meta?.feather ?? "circle",
+      key: item.route,
+      title: screenTitle(item.route, role),
+      description: item.description,
+      icon: item.feather,
       badge,
     };
-    const sectionTitle = meta?.section ?? "Other";
+    const sectionTitle = item.section;
     const existing = sections.find((s) => s.title === sectionTitle);
     if (existing) existing.rows.push(row);
     else sections.push({ title: sectionTitle, rows: [row] });
