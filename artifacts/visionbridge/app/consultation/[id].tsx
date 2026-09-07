@@ -13,11 +13,11 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
-import { useApp, CareCoordinationStatus } from "@/context/AppContext";
+import { useApp, CareCoordinationStatus, UserRole } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
 import { fmtDate, fmtDateTime } from "@/utils/date";
 import { InfoRow } from "@/components/ui/InfoRow";
-import { getCareStatusColor, getCareStatusVariant, getPriorityVariant } from "@/utils/status";
+import { getCareStatusColor, getPriorityVariant } from "@/utils/status";
 import { Avatar } from "@/components/ui/Avatar";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -31,16 +31,102 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function ActionButton({ icon, label, color, onPress, disabled }: { icon: keyof typeof Feather.glyphMap; label: string; color: string; onPress: () => void; disabled?: boolean }) {
+  const colors = useColors();
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.8}
-      style={[styles.actionBtn, { backgroundColor: disabled ? "#e5e7eb" : color + "18", borderColor: disabled ? "#e5e7eb" : color + "40" }]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
+      testID={`consultation-action-${label.toLowerCase().replace(/\s+/g, "-")}`}
+      style={[
+        styles.actionBtn,
+        {
+          backgroundColor: disabled ? colors.muted : color + "18",
+          borderColor: disabled ? colors.border : color + "40",
+        },
+      ]}
     >
-      <Feather name={icon} size={18} color={disabled ? "#9ca3af" : color} />
-      <Text style={[styles.actionBtnText, { color: disabled ? "#9ca3af" : color }]}>{label}</Text>
+      <Feather name={icon} size={18} color={disabled ? colors.mutedForeground : color} />
+      <Text style={[styles.actionBtnText, { color: disabled ? colors.mutedForeground : color }]}>{label}</Text>
     </TouchableOpacity>
+  );
+}
+
+function RoleWorkspaceBanner({ role, status, colors }: { role: UserRole; status: string; colors: ReturnType<typeof useColors> }) {
+  let title = "";
+  let message = "";
+  let icon: keyof typeof Feather.glyphMap = "info";
+  let bg = colors.primary + "14";
+  let border = colors.primary + "30";
+  let iconColor = colors.primary;
+  let titleColor = colors.primaryDark;
+
+  switch (role) {
+    case "Patient":
+      title = "Your Consultation";
+      message = "Review your clinical summary and upcoming appointments.";
+      icon = "user";
+      bg = colors.successLight;
+      border = colors.normalBorder;
+      iconColor = colors.success;
+      titleColor = colors.normalText;
+      break;
+    case "Admin":
+      title = "Admin Workspace";
+      message = "Manage assignments, referrals, and care coordination.";
+      icon = "shield";
+      bg = colors.secondary;
+      border = colors.border;
+      iconColor = colors.secondaryForeground;
+      titleColor = colors.secondaryForeground;
+      break;
+    case "Doctor":
+      title = "Specialist Workspace";
+      message = status === "Reviewed" || status === "Completed"
+        ? "You have submitted a response for this case."
+        : "Review case details and submit a clinical response.";
+      icon = "briefcase"; // Use a standard icon since stethoscope is not in standard feather
+      break;
+    case "Technician":
+      title = "Technician Workspace";
+      message = "Coordinate patient care, referrals, and appointments.";
+      icon = "tool";
+      bg = colors.warningLight;
+      border = colors.warning + "55";
+      iconColor = colors.warning;
+      titleColor = colors.foreground;
+      break;
+    case "CHW":
+      title = "Community Health Workspace";
+      message = "Assist patient with referrals and care follow-up.";
+      icon = "users";
+      bg = colors.warningLight;
+      border = colors.warning + "55";
+      iconColor = colors.warning;
+      titleColor = colors.foreground;
+      break;
+    case "Viewer":
+      title = "Read-only Workspace";
+      message = "Review the consultation record. Clinical and coordination actions are restricted.";
+      icon = "eye";
+      bg = colors.muted;
+      border = colors.border;
+      iconColor = colors.mutedForeground;
+      titleColor = colors.foreground;
+      break;
+  }
+
+  return (
+    <View style={[styles.roleBanner, { backgroundColor: bg, borderColor: border }]}>
+      <Feather name={icon} size={20} color={iconColor} style={{ marginTop: 2 }} />
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.roleBannerTitle, { color: titleColor }]}>{title}</Text>
+        <Text style={[styles.roleBannerDesc, { color: colors.mutedForeground }]}>{message}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -85,6 +171,28 @@ export default function ConsultationDetailScreen() {
   const activeConsultation = consultation;
   const isClosed = consultation.status === "Completed" || consultation.status === "Cancelled";
   const statusColor = getCareStatusColor(consultation.status, colors);
+
+  // ── Role Policy ──
+  const role = currentUser.role;
+  const canAssign = role === "Admin" || (role === "Doctor" && !consultation.assignedDoctorId);
+  const canCall = ["Admin", "Doctor", "Technician", "Patient"].includes(role);
+  const canRespond = role === "Doctor";
+  const canRefer = ["Admin", "Doctor", "Technician", "CHW"].includes(role);
+  const canAppoint = ["Admin", "Doctor", "Technician", "CHW", "Patient"].includes(role);
+  const canCareCoord = ["Admin", "Doctor", "Technician", "CHW"].includes(role);
+  const canComplete = ["Admin", "Doctor"].includes(role);
+
+  const isPatient = role === "Patient";
+
+  const availableActions = [
+    ...(canAssign ? [{ id: 'assign', icon: "user-check", label: "Assign Doctor", color: colors.primary, onPress: () => setShowAssignForm(!showAssignForm), disabled: !!consultation.assignedDoctorId || isClosed }] : []),
+    ...(canCall ? [{ id: 'call', icon: "video", label: "Start Call", color: colors.tint, onPress: () => router.push(`/consultation/call?id=${consultation.id}&patientName=${encodeURIComponent(patient ? `${patient.firstName} ${patient.lastName}` : "Patient")}`), disabled: isClosed }] : []),
+    ...(canRespond ? [{ id: 'respond', icon: "edit-3", label: "Add Response", color: colors.accent, onPress: () => setShowResponseForm(!showResponseForm), disabled: isClosed }] : []),
+    ...(canRefer ? [{ id: 'refer', icon: "send", label: "Create Referral", color: colors.warning, onPress: () => router.push(`/referral/new?consultationId=${consultation.id}&patientId=${consultation.patientId}`), disabled: !!referral || isClosed }] : []),
+    ...(canAppoint ? [{ id: 'appoint', icon: "calendar", label: "Book Appt", color: colors.success, onPress: () => router.push(`/appointment/book?consultationId=${consultation.id}&patientId=${consultation.patientId}`), disabled: !!appointment || isClosed }] : []),
+    ...(canCareCoord ? [{ id: 'coord', icon: "clipboard", label: "Care Plan", color: colors.primary, onPress: () => setShowCareCoordForm(!showCareCoordForm), disabled: isClosed }] : []),
+    ...(canComplete ? [{ id: 'complete', icon: "check-circle", label: "Mark Complete", color: colors.success, onPress: handleMarkCompleted, disabled: consultation.status !== "Reviewed" || isClosed }] : []),
+  ];
 
   async function handleRoundRobinAssign() {
     const doc = await assignRoundRobin(activeConsultation.id);
@@ -150,6 +258,7 @@ export default function ConsultationDetailScreen() {
   }
 
   const availableDoctors = doctors.filter((d) => d.isAvailable);
+  const showCarePlanSection = consultation.followUpDate || (!isPatient && consultation.careCoordinatorNotes);
 
   return (
     <ScrollView
@@ -175,7 +284,7 @@ export default function ConsultationDetailScreen() {
             <Feather name="clock" size={13} color={colors.mutedForeground} />
             <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{fmtDate(consultation.requestedAt)}</Text>
           </View>
-          {consultation.assignmentMethod ? (
+          {!isPatient && consultation.assignmentMethod ? (
             <View style={styles.metaItem}>
               <Feather name="shuffle" size={13} color={colors.mutedForeground} />
                <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
@@ -192,21 +301,26 @@ export default function ConsultationDetailScreen() {
         </View>
       </View>
 
+      <RoleWorkspaceBanner role={role} status={consultation.status} colors={colors} />
+
       {/* ── Quick Actions ── */}
-      <View style={styles.actionsGrid}>
-        <ActionButton icon="user-check" label="Assign Doctor" color={colors.primary} onPress={() => setShowAssignForm(!showAssignForm)} disabled={!!consultation.assignedDoctorId || isClosed} />
-        <ActionButton icon="video" label="Start Call" color="#0ea5e9" onPress={() => router.push(`/consultation/call?id=${consultation.id}&patientName=${encodeURIComponent(patient ? `${patient.firstName} ${patient.lastName}` : "Patient")}`)} disabled={isClosed} />
-        <ActionButton icon="edit-3" label="Add Response" color={colors.accent} onPress={() => setShowResponseForm(!showResponseForm)} disabled={isClosed} />
-        <ActionButton icon="send" label="Create Referral" color={colors.warning} onPress={() => router.push(`/referral/new?consultationId=${consultation.id}&patientId=${consultation.patientId}`)} disabled={!!referral || isClosed} />
-        <ActionButton icon="calendar" label="Book Appointment" color={colors.success} onPress={() => router.push(`/appointment/book?consultationId=${consultation.id}&patientId=${consultation.patientId}`)} disabled={!!appointment || isClosed} />
-        <ActionButton icon="clipboard" label="Care Coordination" color={colors.primary} onPress={() => setShowCareCoordForm(!showCareCoordForm)} disabled={isClosed} />
-        {!isClosed ? (
-          <ActionButton icon="check-circle" label="Mark Complete" color={colors.success} onPress={handleMarkCompleted} disabled={consultation.status !== "Reviewed"} />
-        ) : null}
-      </View>
+      {availableActions.length > 0 ? (
+        <View style={styles.actionsGrid}>
+          {availableActions.map((action) => (
+            <ActionButton
+              key={action.id}
+              icon={action.icon as keyof typeof Feather.glyphMap}
+              label={action.label}
+              color={action.color}
+              onPress={action.onPress}
+              disabled={action.disabled}
+            />
+          ))}
+        </View>
+      ) : null}
 
       {/* ── Doctor Assignment Form ── */}
-      {showAssignForm ? (
+      {showAssignForm && canAssign ? (
         <Section title="ASSIGN SPECIALIST">
           <View style={styles.assignMethodRow}>
             <TouchableOpacity
@@ -214,8 +328,8 @@ export default function ConsultationDetailScreen() {
               onPress={handleRoundRobinAssign}
               activeOpacity={0.85}
             >
-              <Feather name="shuffle" size={16} color="#fff" />
-              <Text style={styles.methodBtnText}>Auto Assign (Round-Robin)</Text>
+              <Feather name="shuffle" size={16} color={colors.primaryForeground} />
+              <Text style={[styles.methodBtnText, { color: colors.primaryForeground }]}>Auto Assign (Round-Robin)</Text>
             </TouchableOpacity>
           </View>
           <Text style={[styles.orDivider, { color: colors.mutedForeground }]}>— or choose manually —</Text>
@@ -242,7 +356,7 @@ export default function ConsultationDetailScreen() {
             </Text>
           ) : null}
           <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: colors.primary }]} onPress={handleManualAssign} activeOpacity={0.85}>
-            <Text style={styles.confirmBtnText}>Confirm Manual Assignment</Text>
+            <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>Confirm Manual Assignment</Text>
           </TouchableOpacity>
         </Section>
       ) : null}
@@ -255,18 +369,24 @@ export default function ConsultationDetailScreen() {
           <View style={styles.patientRow}>
             <Avatar firstName={patient.firstName} lastName={patient.lastName} size={44} fontSize={16} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.patientName, { color: colors.foreground }]}>{patient.firstName} {patient.lastName}</Text>
-              <Text style={[styles.patientMeta, { color: colors.mutedForeground }]}>{patient.patientId} · {patient.village}</Text>
+              <Text style={[styles.patientName, { color: colors.foreground }]}>
+                {isPatient ? "Your Profile" : `${patient.firstName} ${patient.lastName}`}
+              </Text>
+              {!isPatient && (
+                <Text style={[styles.patientMeta, { color: colors.mutedForeground }]}>
+                  {patient.patientId} · {patient.village}
+                </Text>
+              )}
               {patient.medicalHistory.length > 0 ? (
                 <Text style={[styles.history, { color: colors.mutedForeground }]} numberOfLines={1}>{patient.medicalHistory.join(", ")}</Text>
               ) : null}
             </View>
-            <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            {!isPatient && <Feather name="chevron-right" size={16} color={colors.mutedForeground} />}
           </View>
         </TouchableOpacity>
       ) : null}
 
-      {/* ── Assigned Doctor ── */}
+      {/* ── Assigned Specialist ── */}
       {consultation.assignedTo ? (
         <Section title="ASSIGNED SPECIALIST">
           <View style={styles.patientRow}>
@@ -275,27 +395,29 @@ export default function ConsultationDetailScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.docName, { color: colors.foreground }]}>{consultation.assignedTo}</Text>
-              {consultation.assignedAt ? (
+              {!isPatient && consultation.assignedAt ? (
                 <Text style={[styles.docMeta, { color: colors.mutedForeground }]}>
                   Assigned {fmtDateTime(consultation.assignedAt)} · {consultation.assignmentMethod}
                 </Text>
               ) : null}
             </View>
-            <Badge label={consultation.assignmentMethod ?? "Manual"} variant="referral" size="sm" />
+            {!isPatient && (
+              <Badge label={consultation.assignmentMethod ?? "Manual"} variant="referral" size="sm" />
+            )}
           </View>
         </Section>
-      ) : (
-        <View style={[styles.section, { backgroundColor: colors.warningLight, borderColor: "#fcd34d" }]}>
+      ) : !isPatient ? (
+        <View style={[styles.section, { backgroundColor: colors.warningLight, borderColor: colors.warning + "55" }]}>
           <View style={styles.patientRow}>
             <Feather name="alert-circle" size={18} color={colors.warning} />
-               <Text style={[styles.warningText, { color: "#92400e" }]}>
+               <Text style={[styles.warningText, { color: colors.foreground }]}>
                  {consultation.routingStatus === "SPECIALTY_QUEUE"
                    ? `Waiting in the ${consultation.specialty ?? "specialty"} queue. A coordinator can assign this case when an appropriate specialist is available.`
                    : "No specialist assigned yet. Use Assign Doctor above."}
                </Text>
           </View>
         </View>
-      )}
+      ) : null}
 
       {/* ── Linked Screening ── */}
       {screening ? (
@@ -323,7 +445,8 @@ export default function ConsultationDetailScreen() {
         </Section>
       ) : null}
 
-      {consultation.routingReason ? (
+      {/* ── Routing Summary ── */}
+      {!isPatient && consultation.routingReason ? (
         <Section title="ROUTING SUMMARY">
           <View style={styles.patientRow}>
             <Feather name="git-branch" size={18} color={colors.primary} />
@@ -343,7 +466,7 @@ export default function ConsultationDetailScreen() {
       ) : null}
 
       {/* ── Specialist Response Form ── */}
-      {showResponseForm ? (
+      {showResponseForm && canRespond ? (
         <Section title="SPECIALIST RESPONSE">
           <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Diagnosis Override</Text>
           <TextInput value={diagnosisOverride} onChangeText={setDiagnosisOverride} placeholder="Confirmed or revised diagnosis..." placeholderTextColor={colors.mutedForeground} style={[styles.inputField, { color: colors.foreground, borderColor: colors.border }]} />
@@ -352,8 +475,8 @@ export default function ConsultationDetailScreen() {
           <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Clinical Response *</Text>
           <TextInput value={response} onChangeText={setResponse} placeholder="Detailed clinical observations and recommendations..." placeholderTextColor={colors.mutedForeground} multiline numberOfLines={4} style={[styles.textArea, { color: colors.foreground, borderColor: colors.border }]} />
           <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: colors.primary }]} onPress={handleSubmitResponse} activeOpacity={0.85}>
-            <Feather name="send" size={16} color="#fff" />
-            <Text style={styles.confirmBtnText}>Submit Response</Text>
+            <Feather name="send" size={16} color={colors.primaryForeground} />
+            <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>Submit Response</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowResponseForm(false)}><Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text></TouchableOpacity>
         </Section>
@@ -371,7 +494,7 @@ export default function ConsultationDetailScreen() {
           </View>
           {consultation.diagnosisOverride ? (
             <>
-              <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>DIAGNOSIS</Text>
+              <Text style={[styles.fieldLabel, { color: colors.mutedForeground, marginTop: 8 }]}>DIAGNOSIS</Text>
               <Text style={[styles.bodyText, { color: colors.foreground }]}>{consultation.diagnosisOverride}</Text>
             </>
           ) : null}
@@ -383,39 +506,43 @@ export default function ConsultationDetailScreen() {
           ) : null}
           <Text style={[styles.fieldLabel, { color: colors.mutedForeground, marginTop: 8 }]}>NOTES</Text>
           <Text style={[styles.bodyText, { color: colors.foreground }]}>{consultation.specialistResponse}</Text>
-          <TouchableOpacity onPress={() => setShowResponseForm(true)} style={{ marginTop: 8 }}>
-            <Text style={[styles.editLink, { color: colors.primary }]}>Edit response</Text>
-          </TouchableOpacity>
+          {canRespond && !isClosed ? (
+            <TouchableOpacity onPress={() => setShowResponseForm(true)} style={{ marginTop: 12 }}>
+              <Text style={[styles.editLink, { color: colors.primary }]}>Edit response</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : null}
 
-      {/* ── Care Coordination ── */}
-      {showCareCoordForm ? (
-        <Section title="CARE COORDINATION">
+      {/* ── Care Coordination Form ── */}
+      {showCareCoordForm && canCareCoord ? (
+        <Section title="CARE PLAN">
           <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Coordinator Notes</Text>
           <TextInput value={careNotes} onChangeText={setCareNotes} placeholder="Transport arranged, family notified, insurance status..." placeholderTextColor={colors.mutedForeground} multiline numberOfLines={3} style={[styles.textArea, { color: colors.foreground, borderColor: colors.border }]} />
           <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Follow-up Date (YYYY-MM-DD)</Text>
           <TextInput value={followUpDate} onChangeText={setFollowUpDate} placeholder="2025-05-01" placeholderTextColor={colors.mutedForeground} style={[styles.inputField, { color: colors.foreground, borderColor: colors.border }]} keyboardType="numeric" />
           <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: colors.primary }]} onPress={handleSaveCareCoord} activeOpacity={0.85}>
-            <Feather name="save" size={16} color="#fff" />
-            <Text style={styles.confirmBtnText}>Save Care Plan</Text>
+            <Feather name="save" size={16} color={colors.primaryForeground} />
+            <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>Save Care Plan</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowCareCoordForm(false)}><Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text></TouchableOpacity>
         </Section>
       ) : null}
 
       {/* ── Care Coordination (saved) ── */}
-      {(consultation.careCoordinatorNotes || consultation.followUpDate) && !showCareCoordForm ? (
-        <Section title="CARE COORDINATION">
-          {consultation.careCoordinatorNotes ? (
+      {showCarePlanSection && !showCareCoordForm ? (
+        <Section title="CARE PLAN">
+          {!isPatient && consultation.careCoordinatorNotes ? (
             <InfoRow labelFlex={0.45} label="Coordinator Notes" value={consultation.careCoordinatorNotes} />
           ) : null}
           {consultation.followUpDate ? (
             <InfoRow labelFlex={0.45} label="Follow-up Date" value={fmtDate(consultation.followUpDate)} valueColor={colors.primary} />
           ) : null}
-          <TouchableOpacity onPress={() => setShowCareCoordForm(true)}>
-            <Text style={[styles.editLink, { color: colors.primary }]}>Edit care plan</Text>
-          </TouchableOpacity>
+          {canCareCoord && !isClosed ? (
+            <TouchableOpacity onPress={() => setShowCareCoordForm(true)} style={{ marginTop: 8 }}>
+              <Text style={[styles.editLink, { color: colors.primary }]}>Edit care plan</Text>
+            </TouchableOpacity>
+          ) : null}
         </Section>
       ) : null}
 
@@ -434,7 +561,7 @@ export default function ConsultationDetailScreen() {
             <Feather name="chevron-right" size={16} color={colors.referralText} />
           </View>
         </TouchableOpacity>
-      ) : (
+      ) : canRefer ? (
         <TouchableOpacity
           onPress={() => router.push(`/referral/new?consultationId=${consultation.id}&patientId=${consultation.patientId}`)}
           activeOpacity={0.8}
@@ -444,7 +571,7 @@ export default function ConsultationDetailScreen() {
           <Feather name="plus-circle" size={16} color={isClosed ? colors.mutedForeground : colors.primary} />
           <Text style={[styles.ghostBtnText, { color: isClosed ? colors.mutedForeground : colors.primary }]}>Create Referral</Text>
         </TouchableOpacity>
-      )}
+      ) : null}
 
       {/* ── Appointment ── */}
       {appointment ? (
@@ -464,7 +591,7 @@ export default function ConsultationDetailScreen() {
             <Feather name="chevron-right" size={16} color={colors.success} />
           </View>
         </TouchableOpacity>
-      ) : (
+      ) : canAppoint ? (
         <TouchableOpacity
           onPress={() => router.push(`/appointment/book?consultationId=${consultation.id}&patientId=${consultation.patientId}`)}
           activeOpacity={0.8}
@@ -474,33 +601,35 @@ export default function ConsultationDetailScreen() {
           <Feather name="plus-circle" size={16} color={isClosed ? colors.mutedForeground : colors.success} />
           <Text style={[styles.ghostBtnText, { color: isClosed ? colors.mutedForeground : colors.success }]}>Book Appointment</Text>
         </TouchableOpacity>
-      )}
+      ) : null}
 
       {/* ── Status Timeline ── */}
-      <Section title="CARE COORDINATION STATUS">
-        {(["Pending","Assigned","InReview","Reviewed","Referred","Completed"] as CareCoordinationStatus[]).map((s, i, arr) => {
-          const isDone = isStatusReached(s, consultation.status);
-          const isCurrent = s === consultation.status;
-          return (
-            <View key={s} style={styles.timelineRow}>
-              <View style={styles.timelineLeft}>
-                <View style={[styles.timelineDot, {
-                  backgroundColor: isDone ? colors.success : isCurrent ? colors.primary : colors.muted,
-                  borderColor: isDone ? colors.success : isCurrent ? colors.primary : colors.border,
-                }]}>
-                  {isDone ? <Feather name="check" size={10} color="#fff" /> : null}
+      {!isPatient && (
+        <Section title="CARE COORDINATION STATUS">
+          {(["Pending","Assigned","InReview","Reviewed","Referred","Completed"] as CareCoordinationStatus[]).map((s, i, arr) => {
+            const isDone = isStatusReached(s, consultation.status);
+            const isCurrent = s === consultation.status;
+            return (
+              <View key={s} style={styles.timelineRow}>
+                <View style={styles.timelineLeft}>
+                  <View style={[styles.timelineDot, {
+                    backgroundColor: isDone ? colors.success : isCurrent ? colors.primary : colors.muted,
+                    borderColor: isDone ? colors.success : isCurrent ? colors.primary : colors.border,
+                  }]}>
+                    {isDone ? <Feather name="check" size={10} color={colors.successForeground} /> : null}
+                  </View>
+                  {i < arr.length - 1 ? (
+                    <View style={[styles.timelineLine, { backgroundColor: isDone ? colors.success : colors.border }]} />
+                  ) : null}
                 </View>
-                {i < arr.length - 1 ? (
-                  <View style={[styles.timelineLine, { backgroundColor: isDone ? colors.success : colors.border }]} />
-                ) : null}
+                <Text style={[styles.timelineLabel, { color: isCurrent ? colors.primary : isDone ? colors.foreground : colors.mutedForeground, fontWeight: isCurrent ? "700" : "400" }]}>
+                  {s}
+                </Text>
               </View>
-              <Text style={[styles.timelineLabel, { color: isCurrent ? colors.primary : isDone ? colors.foreground : colors.mutedForeground, fontWeight: isCurrent ? "700" : "400" }]}>
-                {s}
-              </Text>
-            </View>
-          );
-        })}
-      </Section>
+            );
+          })}
+        </Section>
+      )}
     </ScrollView>
   );
 }
@@ -527,117 +656,65 @@ const styles = StyleSheet.create({
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusText: { fontSize: 16, fontWeight: "700" },
   divider: { height: 1, marginVertical: 2 },
-  metaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+
+  metaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, rowGap: 8 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  metaText: { fontSize: 12 },
+  metaText: { fontSize: 13, fontWeight: "500" },
 
-  actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  actionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    width: "48%",
-  },
-  actionBtnText: { fontSize: 12, fontWeight: "600", flex: 1 },
+  roleBanner: { flexDirection: "row", gap: 12, padding: 14, borderRadius: 12, borderWidth: 1, alignItems: "flex-start" },
+  roleBannerTitle: { fontSize: 15, fontWeight: "600", marginBottom: 3 },
+  roleBannerDesc: { fontSize: 13, lineHeight: 18 },
 
-  section: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 10 },
+  actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  actionBtn: { width: "48%", minHeight: 44, flexDirection: "row", alignItems: "center", gap: 7, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1 },
+  actionBtnText: { flex: 1, fontSize: 13, fontWeight: "600" },
+
+  section: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 12 },
   sectionLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 1 },
-
-  assignMethodRow: {},
-  methodBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  methodBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  orDivider: { textAlign: "center", fontSize: 12, marginVertical: 4 },
-  doctorOption: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    gap: 10,
-  },
-  docAv: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  docName: { fontSize: 14, fontWeight: "600" },
-  docMeta: { fontSize: 12 },
-  docLoad: { fontSize: 11 },
-  unavailNote: { fontSize: 12, textAlign: "center" },
-  confirmBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  confirmBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-
   patientRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  patientName: { fontSize: 15, fontWeight: "600" },
-  patientMeta: { fontSize: 12 },
-  history: { fontSize: 11, marginTop: 2 },
-  eyeWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  patientName: { fontSize: 15, fontWeight: "600", marginBottom: 2 },
+  patientMeta: { fontSize: 13 },
+  history: { fontSize: 12, marginTop: 2 },
 
-  warningText: { fontSize: 13, flex: 1 },
+  docAv: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  docName: { fontSize: 15, fontWeight: "600", marginBottom: 2 },
+  docMeta: { fontSize: 13 },
+  docLoad: { fontSize: 12, marginTop: 2 },
 
-  fieldLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 0.5 },
-  inputField: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-  },
-  textArea: {
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 14,
-    minHeight: 80,
-    textAlignVertical: "top",
-  },
-  cancelText: { textAlign: "center", fontSize: 14 },
+  eyeWrap: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
 
-  responseHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  responseTitle: { fontSize: 14, fontWeight: "700", flex: 1 },
-  responseDate: { fontSize: 11 },
-  editLink: { fontSize: 13, fontWeight: "600" },
-  bodyText: { fontSize: 14, lineHeight: 22 },
-  routingDisclaimer: { fontSize: 11, lineHeight: 16, marginTop: 2 },
+  warningText: { fontSize: 13, flex: 1, lineHeight: 18, fontWeight: "500" },
+  routingDisclaimer: { fontSize: 12, lineHeight: 17, fontStyle: "italic", marginTop: 4 },
 
+  bodyText: { fontSize: 14, lineHeight: 20 },
 
-  ghostBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-  },
+  fieldLabel: { fontSize: 12, fontWeight: "600", marginTop: 4, marginBottom: 4 },
+  inputField: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 14, height: 44 },
+  textArea: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 14, minHeight: 80, textAlignVertical: "top" },
+
+  confirmBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 14, borderRadius: 10, marginTop: 6 },
+  confirmBtnText: { fontSize: 14, fontWeight: "600" },
+  cancelText: { textAlign: "center", fontSize: 14, padding: 8 },
+
+  editLink: { fontSize: 13, fontWeight: "600", alignSelf: "flex-start" },
+
+  responseHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
+  responseTitle: { fontSize: 14, fontWeight: "700" },
+  responseDate: { fontSize: 12, marginLeft: "auto" },
+
+  ghostBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 14, borderRadius: 12, borderWidth: 1, borderStyle: "dashed" },
   ghostBtnText: { fontSize: 14, fontWeight: "600" },
 
-  timelineRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, minHeight: 32 },
-  timelineLeft: { alignItems: "center", width: 20 },
-  timelineDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  timelineLine: { width: 2, flex: 1, marginTop: 2 },
-  timelineLabel: { fontSize: 13, paddingTop: 2 },
+  timelineRow: { flexDirection: "row", alignItems: "center", height: 28 },
+  timelineLeft: { width: 20, alignItems: "center", justifyContent: "center" },
+  timelineDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  timelineLine: { position: "absolute", top: 14, bottom: -14, width: 2 },
+  timelineLabel: { fontSize: 14, marginLeft: 12 },
+
+  assignMethodRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  methodBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 12, borderRadius: 10, borderWidth: 1 },
+  methodBtnText: { fontSize: 14, fontWeight: "600" },
+  orDivider: { textAlign: "center", fontSize: 13, marginVertical: 8 },
+  doctorOption: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 10, borderWidth: 1, marginBottom: 8 },
+  unavailNote: { fontSize: 13, textAlign: "center", fontStyle: "italic", marginTop: 4, marginBottom: 12 },
 });
