@@ -136,10 +136,16 @@ router.get("/bootstrap", async (req: Request, res: Response) => {
         ))),
       );
     } else {
+      // Only Admin receives the tenant-wide consultation queue. Other staff
+      // roles can still use the parts of bootstrap needed for their workspace,
+      // but must not hydrate client state with queue records they cannot open.
+      const consultationQuery = auth.role === "Admin"
+        ? db!.select().from(consultationsTable).where(eq(consultationsTable.tenantId, tid))
+        : Promise.resolve([] as Array<typeof consultationsTable.$inferSelect>);
       [patients, screenings, consultations, referrals, appointments, campaigns, notifications] = await Promise.all([
         db!.select().from(patientsTable).where(eq(patientsTable.tenantId, tid)),
         db!.select().from(screeningsTable).where(eq(screeningsTable.tenantId, tid)),
-        db!.select().from(consultationsTable).where(eq(consultationsTable.tenantId, tid)),
+        consultationQuery,
         db!.select().from(referralsTable).where(eq(referralsTable.tenantId, tid)),
         db!.select().from(appointmentsTable).where(eq(appointmentsTable.tenantId, tid)),
         db!.select().from(campaignsTable).where(eq(campaignsTable.tenantId, tid)),
@@ -224,13 +230,16 @@ router.get("/my-consultations", async (req: Request, res: Response) => {
   }
   try {
     const patientRows = await db!.select().from(patientsTable)
-      .where(eq(patientsTable.userId, auth.sub))
+      .where(and(eq(patientsTable.tenantId, auth.tenantId), eq(patientsTable.userId, auth.sub)))
       .limit(1);
     const patient = patientRows[0];
     if (!patient) { res.json({ items: [] }); return; }
 
     const rows = await db!.select().from(consultationsTable)
-      .where(eq(consultationsTable.patientId, patient.id));
+      .where(and(
+        eq(consultationsTable.tenantId, auth.tenantId),
+        eq(consultationsTable.patientId, patient.id),
+      ));
     res.json({ items: rows });
   } catch (err) {
     handleServerError(res, "clinical", err, "Failed to load your consultations");

@@ -8,3 +8,9 @@ Patient consultation UX must be protected at three layers: the navigation resolv
 **Why:** Hiding a tab alone still leaves unrelated consultation data in shared client state and allows stale tabs or deep links to render the staff workspace.
 
 **How to apply:** Whenever a new clinical destination or query is added, define the permitted roles, scope the server response by authenticated user or assigned care team, and add a matching client route guard.
+
+Queue role restrictions must also apply to bootstrap payloads: roles that cannot open the staff queue should receive no queue consultation rows, even when they share the same tenant.
+
+**Why:** A restricted list route cannot prevent leakage when a broader bootstrap response has already hydrated the client with the same records.
+
+**How to apply:** Keep the permitted queue-role set aligned across navigation, screen guards, endpoint authorization, and bootstrap query branches.

@@ -174,10 +174,7 @@ export default function ConsultationDetailScreen() {
   const isPatient = role === "Patient";
   const patientOwnsConsultation =
     !isPatient ||
-    (!!user && !!patient && (
-      patient.userId === user.id ||
-      (!patient.userId && `${patient.firstName} ${patient.lastName}` === user.fullName)
-    ));
+    (!!user && !!patient && patient.userId === user.id);
 
   if (!can("consultation", "read") || !patientOwnsConsultation) {
     return (

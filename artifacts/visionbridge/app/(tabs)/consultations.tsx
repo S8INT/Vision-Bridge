@@ -13,6 +13,7 @@ import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, CareCoordinationStatus } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { ConsultationCard } from "@/components/ConsultationCard";
+import { isStaffConsultationQueueRole } from "@/lib/navConfig";
 
 type FilterTab = "All" | "Pending" | "Assigned" | "InReview" | "Reviewed" | "Referred" | "Completed";
 
@@ -21,7 +22,7 @@ export default function ConsultationsScreen() {
   const { user, can } = useAuth();
   const { consultations, patients } = useApp();
   const [activeTab, setActiveTab] = useState<FilterTab>("All");
-  const canViewQueue = user?.role !== "Patient" && can("consultation", "list");
+  const canViewQueue = isStaffConsultationQueueRole(user?.role) && can("consultation", "list");
 
   useEffect(() => {
     if (!user || canViewQueue) return;

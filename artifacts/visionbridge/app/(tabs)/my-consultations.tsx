@@ -18,6 +18,7 @@ import { useApp, type Consultation, type Patient } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { fmtShortDate } from "@/utils/date";
+import { isStaffConsultationQueueRole } from "@/lib/navConfig";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type FilterTab = "Active" | "Completed" | "All";
@@ -208,7 +209,7 @@ export default function MyConsultationsScreen() {
   const { consultations, patients, refresh: appRefresh } = useApp();
   const { highlightId } = useLocalSearchParams<{ highlightId?: string }>();
   const isPatient = user?.role === "Patient";
-  const canViewStaffQueue = can("consultation", "list");
+  const canViewStaffQueue = isStaffConsultationQueueRole(user?.role) && can("consultation", "list");
 
   const flatListRef = useRef<FlatList<Consultation>>(null);
 
@@ -217,8 +218,7 @@ export default function MyConsultationsScreen() {
   // ── Find patient record ──────────────────────────────────────────────────────
   const localPatient = useMemo(
     () =>
-      patients.find((p) => p.userId === user?.id) ??
-      patients.find((p) => `${p.firstName} ${p.lastName}` === user?.fullName),
+      patients.find((p) => p.userId === user?.id),
     [patients, user],
   );
 

@@ -24,6 +24,12 @@ export interface NavigationItem {
   roles?: UserRole[];
 }
 
+export const STAFF_CONSULTATION_QUEUE_ROLES: UserRole[] = ["Admin", "Doctor"];
+
+export function isStaffConsultationQueueRole(role: UserRole | undefined): boolean {
+  return !!role && STAFF_CONSULTATION_QUEUE_ROLES.includes(role);
+}
+
 /**
  * All global destinations. Patient/consultation workspaces keep their
  * image, AI, timeline and care-plan actions contextual to those screens.
@@ -31,7 +37,7 @@ export interface NavigationItem {
 export const NAVIGATION_ITEMS: NavigationItem[] = [
   { id: "home", route: "index", label: "Home", description: "Overview and quick actions", sf: "house", sfSelected: "house.fill", feather: "home", section: "Workspace", placement: "primary" },
   { id: "patients", route: "patients", label: "Patients", description: "Register and manage patients", sf: "person.2", sfSelected: "person.2.fill", feather: "users", section: "Workspace", placement: "primary", capabilities: [{ resource: "patient", action: "list" }] },
-  { id: "consultations", route: "consultations", label: "Consults", description: "Teleconsultation requests and reviews", sf: "message.circle", sfSelected: "message.circle.fill", feather: "message-circle", section: "Workspace", placement: "primary", capabilities: [{ resource: "consultation", action: "list" }], roles: ["Admin", "Doctor"] },
+  { id: "consultations", route: "consultations", label: "Consults", description: "Teleconsultation requests and reviews", sf: "message.circle", sfSelected: "message.circle.fill", feather: "message-circle", section: "Workspace", placement: "primary", capabilities: [{ resource: "consultation", action: "list" }], roles: STAFF_CONSULTATION_QUEUE_ROLES },
   { id: "visits", route: "visits", label: "Visits", description: "Your appointments and visits", sf: "calendar", sfSelected: "calendar", feather: "calendar", section: "My care", placement: "primary", capabilities: [{ resource: "consultation", action: "list" }], roles: ["Patient"] },
   { id: "my-consultations", route: "my-consultations", label: "My Consults", description: "Your consultation history", sf: "message.circle", sfSelected: "message.circle.fill", feather: "message-circle", section: "My care", placement: "primary", capabilities: [{ resource: "consultation", action: "list" }], roles: ["Patient"] },
   { id: "analytics", route: "analytics", label: "Insights", description: "Program metrics and trends", sf: "chart.bar", sfSelected: "chart.bar.fill", feather: "bar-chart-2", section: "Insights", placement: "secondary", capabilities: [{ resource: "analytics", action: "view" }] },
