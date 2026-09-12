@@ -16,9 +16,9 @@ import { useColors } from "@/hooks/useColors";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, type Consultation, type Patient } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
+import { isStaffConsultationQueueRole, resolveConsultationRoute } from "@/lib/navConfig";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { fmtShortDate } from "@/utils/date";
-import { isStaffConsultationQueueRole } from "@/lib/navConfig";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type FilterTab = "Active" | "Completed" | "All";
@@ -281,7 +281,7 @@ export default function MyConsultationsScreen() {
 
   useEffect(() => {
     if (!user || isPatient) return;
-    router.replace((canViewStaffQueue ? "/(tabs)/consultations" : "/(tabs)/index") as never);
+    router.replace(resolveConsultationRoute(user.role, canViewStaffQueue) as never);
   }, [canViewStaffQueue, isPatient, user]);
 
   const onRefresh = useCallback(async () => {

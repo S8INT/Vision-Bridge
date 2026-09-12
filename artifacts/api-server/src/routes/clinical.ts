@@ -27,6 +27,7 @@ import { requireAuth } from "../middlewares/auth.js";
 import { handleServerError, requireAuthContext, requireDb } from "../lib/http.js";
 import { notifyDoctorOfAssignment, notifyUserInBackground } from "../lib/notify.js";
 import { routeConsultation } from "../lib/routing.js";
+import { canViewConsultationQueue, scopePatientRows } from "../lib/clinicalAccess.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -83,6 +84,16 @@ router.get("/bootstrap", async (req: Request, res: Response) => {
             : eq(notificationsTable.userId, auth.sub),
         ),
       );
+
+      // Keep the response boundary defensive even if a future query loses its
+      // patient predicate. The database filters above are still important for
+      // minimizing what is read, while this final scope prevents over-sharing.
+      if (ownPatient) {
+        screenings = scopePatientRows(screenings, ownPatient.id);
+        consultations = scopePatientRows(consultations, ownPatient.id);
+        referrals = scopePatientRows(referrals, ownPatient.id);
+        appointments = scopePatientRows(appointments, ownPatient.id);
+      }
     } else if (auth.role === "Doctor") {
       // Doctors receive only their assigned queue and records linked to those
       // patients. The client can render a useful workspace without receiving
@@ -240,7 +251,7 @@ router.get("/my-consultations", async (req: Request, res: Response) => {
         eq(consultationsTable.tenantId, auth.tenantId),
         eq(consultationsTable.patientId, patient.id),
       ));
-    res.json({ items: rows });
+    res.json({ items: scopePatientRows(rows, patient.id) });
   } catch (err) {
     handleServerError(res, "clinical", err, "Failed to load your consultations");
   }
@@ -436,7 +447,7 @@ router.get("/consultations", async (req: Request, res: Response) => {
   const auth = requireAuthContext(req, res);
   if (!auth || !requireDb(res)) return;
 
-  if (!["Admin", "Doctor"].includes(auth.role)) {
+  if (!canViewConsultationQueue(auth.role)) {
     res.status(403).json({ error: "This consultation queue is restricted to clinical reviewers" });
     return;
   }

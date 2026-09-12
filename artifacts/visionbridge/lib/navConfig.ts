@@ -30,6 +30,26 @@ export function isStaffConsultationQueueRole(role: UserRole | undefined): boolea
   return !!role && STAFF_CONSULTATION_QUEUE_ROLES.includes(role);
 }
 
+export type ConsultationRoute =
+  | "/(tabs)/consultations"
+  | "/(tabs)/my-consultations"
+  | "/(tabs)/index";
+
+/**
+ * Resolve consultation deep links to a route the current role can safely use.
+ * The screen-level guard calls this too, so a manually entered queue URL
+ * cannot strand a patient or unauthorized staff member on the queue screen.
+ */
+export function resolveConsultationRoute(
+  role: UserRole,
+  canListConsultations: boolean,
+): ConsultationRoute {
+  if (isStaffConsultationQueueRole(role) && canListConsultations) {
+    return "/(tabs)/consultations";
+  }
+  return role === "Patient" ? "/(tabs)/my-consultations" : "/(tabs)/index";
+}
+
 /**
  * All global destinations. Patient/consultation workspaces keep their
  * image, AI, timeline and care-plan actions contextual to those screens.
