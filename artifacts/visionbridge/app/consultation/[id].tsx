@@ -14,6 +14,7 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, CareCoordinationStatus, UserRole } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/Badge";
 import { fmtDate, fmtDateTime } from "@/utils/date";
 import { InfoRow } from "@/components/ui/InfoRow";
@@ -140,6 +141,7 @@ export default function ConsultationDetailScreen() {
     referrals, appointments, addNotification,
     getReferral, getAppointment,
   } = useApp();
+  const { user, can } = useAuth();
 
   const consultation = consultations.find((c) => c.id === id);
   const patient = consultation ? getPatient(consultation.patientId) : undefined;
@@ -168,12 +170,29 @@ export default function ConsultationDetailScreen() {
     );
   }
 
+  const role = user?.role ?? currentUser.role;
+  const isPatient = role === "Patient";
+  const patientOwnsConsultation =
+    !isPatient ||
+    (!!user && !!patient && (
+      patient.userId === user.id ||
+      (!patient.userId && `${patient.firstName} ${patient.lastName}` === user.fullName)
+    ));
+
+  if (!can("consultation", "read") || !patientOwnsConsultation) {
+    return (
+      <View style={[styles.center, { backgroundColor: colors.background }]}>
+        <Feather name="shield" size={36} color={colors.mutedForeground} />
+        <Text style={[styles.notFound, { color: colors.mutedForeground }]}>This consultation is not available for your account.</Text>
+      </View>
+    );
+  }
+
   const activeConsultation = consultation;
   const isClosed = consultation.status === "Completed" || consultation.status === "Cancelled";
   const statusColor = getCareStatusColor(consultation.status, colors);
 
   // ── Role Policy ──
-  const role = currentUser.role;
   const canAssign = role === "Admin" || (role === "Doctor" && !consultation.assignedDoctorId);
   const canCall = ["Admin", "Doctor", "Technician", "Patient"].includes(role);
   const canRespond = role === "Doctor";
@@ -181,8 +200,6 @@ export default function ConsultationDetailScreen() {
   const canAppoint = ["Admin", "Doctor", "Technician", "CHW", "Patient"].includes(role);
   const canCareCoord = ["Admin", "Doctor", "Technician", "CHW"].includes(role);
   const canComplete = ["Admin", "Doctor"].includes(role);
-
-  const isPatient = role === "Patient";
 
   const availableActions = [
     ...(canAssign ? [{ id: 'assign', icon: "user-check", label: "Assign Doctor", color: colors.primary, onPress: () => setShowAssignForm(!showAssignForm), disabled: !!consultation.assignedDoctorId || isClosed }] : []),

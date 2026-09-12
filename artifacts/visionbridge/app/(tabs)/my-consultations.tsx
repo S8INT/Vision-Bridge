@@ -204,9 +204,11 @@ function ConsultCard({ consultation, onPress, highlighted }: {
 // ── Main Screen ────────────────────────────────────────────────────────────────
 export default function MyConsultationsScreen() {
   const colors = useColors();
-  const { user, accessToken } = useAuth();
+  const { user, accessToken, can } = useAuth();
   const { consultations, patients, refresh: appRefresh } = useApp();
   const { highlightId } = useLocalSearchParams<{ highlightId?: string }>();
+  const isPatient = user?.role === "Patient";
+  const canViewStaffQueue = can("consultation", "list");
 
   const flatListRef = useRef<FlatList<Consultation>>(null);
 
@@ -226,6 +228,7 @@ export default function MyConsultationsScreen() {
 
   // ── Fetch from API if not in local state ─────────────────────────────────────
   useEffect(() => {
+    if (!isPatient) return;
     if (localPatient) { setMyPatient(localPatient); return; }
     if (!accessToken) return;
     setLoadingProfile(true);
@@ -246,7 +249,7 @@ export default function MyConsultationsScreen() {
       })
       .catch(() => setProfileError("error"))
       .finally(() => setLoadingProfile(false));
-  }, [localPatient, accessToken]);
+  }, [localPatient, accessToken, isPatient]);
 
   // ── My consultations ─────────────────────────────────────────────────────────
   const [myConsultations, setMyConsultations] = useState<Consultation[]>([]);
@@ -254,7 +257,7 @@ export default function MyConsultationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchMyConsultations = useCallback(async (showSpinner = false) => {
-    if (!accessToken) return;
+    if (!isPatient || !accessToken) return;
     if (showSpinner) setLoadingConsults(true);
     try {
       const res = await fetchWithTimeout(`${API_BASE}/clinical/my-consultations`, {
@@ -272,9 +275,14 @@ export default function MyConsultationsScreen() {
       }
     } catch { /* silent */ }
     finally { setLoadingConsults(false); }
-  }, [accessToken]);
+  }, [accessToken, isPatient]);
 
   useEffect(() => { fetchMyConsultations(true); }, [fetchMyConsultations]);
+
+  useEffect(() => {
+    if (!user || isPatient) return;
+    router.replace((canViewStaffQueue ? "/(tabs)/consultations" : "/(tabs)/index") as never);
+  }, [canViewStaffQueue, isPatient, user]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -326,6 +334,15 @@ export default function MyConsultationsScreen() {
   }), [displayConsultations]);
 
   const { topPad, botPad } = useScreenPadding();
+
+  if (!isPatient) {
+    return (
+      <View style={[st.loadingScreen, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[st.loadingText, { color: colors.mutedForeground }]}>Opening your workspace…</Text>
+      </View>
+    );
+  }
 
   // ── Loading state ────────────────────────────────────────────────────────────
   if (loadingProfile || loadingConsults) {

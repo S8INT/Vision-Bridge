@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -11,14 +11,22 @@ import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
 import { useApp, CareCoordinationStatus } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import { ConsultationCard } from "@/components/ConsultationCard";
 
 type FilterTab = "All" | "Pending" | "Assigned" | "InReview" | "Reviewed" | "Referred" | "Completed";
 
 export default function ConsultationsScreen() {
   const colors = useColors();
+  const { user, can } = useAuth();
   const { consultations, patients } = useApp();
   const [activeTab, setActiveTab] = useState<FilterTab>("All");
+  const canViewQueue = user?.role !== "Patient" && can("consultation", "list");
+
+  useEffect(() => {
+    if (!user || canViewQueue) return;
+    router.replace((user.role === "Patient" ? "/(tabs)/my-consultations" : "/(tabs)/index") as never);
+  }, [canViewQueue, user]);
 
   const filtered = useMemo(() => {
     if (activeTab === "All") return consultations;
@@ -43,6 +51,15 @@ export default function ConsultationsScreen() {
   const { topPad, botPad } = useScreenPadding();
 
   const urgentCount = consultations.filter((c) => c.priority === "Emergency" && c.status !== "Completed" && c.status !== "Cancelled").length;
+
+  if (!canViewQueue) {
+    return (
+      <View style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
+        <Feather name="shield" size={36} color={colors.mutedForeground} />
+        <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Opening your consultation workspace…</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -130,5 +147,6 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 13, fontWeight: "600" },
   list: { padding: 16 },
   empty: { alignItems: "center", gap: 12, paddingTop: 60 },
+  center: { alignItems: "center", justifyContent: "center", gap: 12 },
   emptyText: { fontSize: 16 },
 });

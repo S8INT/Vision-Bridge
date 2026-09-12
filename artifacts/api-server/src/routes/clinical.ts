@@ -46,7 +46,44 @@ router.get("/bootstrap", async (req: Request, res: Response) => {
     let campaigns: Array<typeof campaignsTable.$inferSelect>;
     let notifications;
 
-    if (auth.role === "Doctor") {
+    if (auth.role === "Patient") {
+      const ownPatientRows = await db!.select().from(patientsTable).where(
+        and(eq(patientsTable.tenantId, tid), eq(patientsTable.userId, auth.sub)),
+      );
+      const ownPatient = ownPatientRows[0];
+      const ownPatientIds = ownPatient ? [ownPatient.id] : [];
+
+      patients = ownPatient ? [ownPatient] : [];
+      screenings = ownPatientIds.length > 0
+        ? await db!.select().from(screeningsTable).where(
+          and(eq(screeningsTable.tenantId, tid), inArray(screeningsTable.patientId, ownPatientIds)),
+        )
+        : [];
+      consultations = ownPatientIds.length > 0
+        ? await db!.select().from(consultationsTable).where(
+          and(eq(consultationsTable.tenantId, tid), inArray(consultationsTable.patientId, ownPatientIds)),
+        )
+        : [];
+      referrals = ownPatientIds.length > 0
+        ? await db!.select().from(referralsTable).where(
+          and(eq(referralsTable.tenantId, tid), inArray(referralsTable.patientId, ownPatientIds)),
+        )
+        : [];
+      appointments = ownPatientIds.length > 0
+        ? await db!.select().from(appointmentsTable).where(
+          and(eq(appointmentsTable.tenantId, tid), inArray(appointmentsTable.patientId, ownPatientIds)),
+        )
+        : [];
+      campaigns = [];
+      notifications = await db!.select().from(notificationsTable).where(
+        and(
+          eq(notificationsTable.tenantId, tid),
+          ownPatient
+            ? or(eq(notificationsTable.userId, auth.sub), eq(notificationsTable.patientId, ownPatient.id))
+            : eq(notificationsTable.userId, auth.sub),
+        ),
+      );
+    } else if (auth.role === "Doctor") {
       // Doctors receive only their assigned queue and records linked to those
       // patients. The client can render a useful workspace without receiving
       // the entire tenant roster.
@@ -181,6 +218,10 @@ function makePatchRoute(table: any, allowedStatuses?: readonly string[]) {
 router.get("/my-consultations", async (req: Request, res: Response) => {
   const auth = requireAuthContext(req, res);
   if (!auth || !requireDb(res)) return;
+  if (auth.role !== "Patient") {
+    res.status(403).json({ error: "This workspace is only available to patients" });
+    return;
+  }
   try {
     const patientRows = await db!.select().from(patientsTable)
       .where(eq(patientsTable.userId, auth.sub))
@@ -382,7 +423,37 @@ router.get("/screenings",       makeListRoute(screeningsTable));
 router.post("/screenings",      makeCreateRoute(screeningsTable, () => ({ capturedAt: new Date() }), SCREENING_STATUSES));
 router.patch("/screenings/:id", makePatchRoute(screeningsTable, SCREENING_STATUSES));
 
-router.get("/consultations",       makeListRoute(consultationsTable));
+router.get("/consultations", async (req: Request, res: Response) => {
+  const auth = requireAuthContext(req, res);
+  if (!auth || !requireDb(res)) return;
+
+  if (!["Admin", "Doctor"].includes(auth.role)) {
+    res.status(403).json({ error: "This consultation queue is restricted to clinical reviewers" });
+    return;
+  }
+
+  try {
+    if (auth.role === "Doctor") {
+      const [doctor] = await db!.select().from(doctorsTable).where(
+        and(eq(doctorsTable.tenantId, auth.tenantId), eq(doctorsTable.userId, auth.sub)),
+      ).limit(1);
+      const rows = doctor
+        ? await db!.select().from(consultationsTable).where(
+          and(eq(consultationsTable.tenantId, auth.tenantId), eq(consultationsTable.assignedDoctorId, doctor.id)),
+        )
+        : [];
+      res.json({ items: rows });
+      return;
+    }
+
+    const rows = await db!.select().from(consultationsTable).where(
+      eq(consultationsTable.tenantId, auth.tenantId),
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    handleServerError(res, "clinical", err, "Failed to list consultations");
+  }
+});
 router.post("/consultations",      makeCreateRoute(consultationsTable, () => ({ requestedAt: new Date() }), CONSULTATION_STATUSES));
 
 // Smart PATCH for consultations — fires a push notification to the patient
@@ -390,6 +461,10 @@ router.post("/consultations",      makeCreateRoute(consultationsTable, () => ({ 
 router.patch("/consultations/:id", async (req: Request, res: Response) => {
   if (!req.auth) { res.status(401).end(); return; }
   if (!requireDb(res)) return;
+  if (!["Admin", "Doctor", "Technician"].includes(req.auth.role)) {
+    res.status(403).json({ error: "Your role cannot update consultation records" });
+    return;
+  }
   if (!validateStatus(req, res, CONSULTATION_STATUSES)) return;
   const id = String(req.params["id"] ?? "");
   try {

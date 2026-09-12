@@ -1,3 +1,4 @@
 - [Expo dev quirks](expo-dev-quirks.md) — use EXPO_OFFLINE=1 (not CI=1) to unblock Expo CLI prompts; expo-file-system v19 legacy path; tsconfig.base must stay esnext/bundler.
 - [drizzle-zod requires zod/v4](drizzle-zod-v4.md) — with drizzle-zod 0.8, import z from "zod/v4" or z.infer fails; TS6305 ref errors often mask this.
 - [Navigation presentation](navigation-presentation.md) — use the shared custom tab bar for complete mobile labels; native tab labels can ellipsize in narrow previews.
+- [Role-scoped clinical data](role-scoped-clinical-data.md) — role-aware navigation must be paired with server bootstrap/query scoping so patient accounts never hydrate tenant-wide consultation data.
