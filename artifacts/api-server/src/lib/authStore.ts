@@ -21,6 +21,7 @@ import {
   pool,
   tenantsTable,
   usersTable,
+  doctorsTable,
   sessionsTable,
   authAuditLogTable,
 } from "@workspace/db";
@@ -199,6 +200,78 @@ async function hydrateCache(tenantId: string) {
   }
 }
 
+const DEFAULT_DOCTOR_CAPABILITIES = [
+  "General Ophthalmology",
+  "Retina",
+  "Glaucoma",
+  "Cataract / Anterior Segment",
+  "Pediatric Ophthalmology",
+  "Cornea",
+];
+
+/**
+ * Keep each Doctor auth account linked to an operational doctor-directory row.
+ * Without this row the account can sign in but cannot receive routed cases.
+ */
+export async function ensureDoctorDirectoryEntry(user: Pick<
+  StoredUser,
+  "id" | "tenantId" | "role" | "fullName" | "facility" | "district" | "phone" | "isActive"
+>): Promise<void> {
+  if (!dbAvailable || user.role !== "Doctor") return;
+
+  await waitForUserPersistence(user.id);
+
+  const linked = await db
+    .select({ id: doctorsTable.id })
+    .from(doctorsTable)
+    .where(and(eq(doctorsTable.tenantId, user.tenantId), eq(doctorsTable.userId, user.id)))
+    .limit(1);
+  if (linked.length > 0) return;
+
+  // Reuse an unlinked row only when its tenant and display name match.
+  const unlinked = await db
+    .select({ id: doctorsTable.id })
+    .from(doctorsTable)
+    .where(and(
+      eq(doctorsTable.tenantId, user.tenantId),
+      eq(doctorsTable.name, user.fullName),
+    ))
+    .limit(1);
+
+  if (unlinked[0]) {
+    await db.update(doctorsTable)
+      .set({
+        userId: user.id,
+        isAvailable: user.isActive,
+        clinic: user.facility || "VisionBridge Clinical Network",
+        district: user.district || "Mbarara",
+        phone: user.phone ?? null,
+      })
+      .where(eq(doctorsTable.id, unlinked[0].id));
+    return;
+  }
+
+  await db.insert(doctorsTable).values({
+    tenantId: user.tenantId,
+    userId: user.id,
+    name: user.fullName,
+    specialty: "General Ophthalmology",
+    clinic: user.facility || "VisionBridge Clinical Network",
+    district: user.district || "Mbarara",
+    phone: user.phone ?? null,
+    isAvailable: user.isActive,
+    capabilities: DEFAULT_DOCTOR_CAPABILITIES,
+    maxConcurrentCases: 20,
+  });
+}
+
+async function syncDoctorDirectory(): Promise<void> {
+  const doctorUsers = Array.from(users.values()).filter((user) => user.role === "Doctor");
+  for (const user of doctorUsers) {
+    await ensureDoctorDirectoryEntry(user);
+  }
+}
+
 function seedMockMode() {
   // No DB available — set up an empty in-memory tenant so the app still boots.
   const tenantId = "tenant-mbarara-mock";
@@ -218,6 +291,7 @@ export async function initAuthStore(): Promise<void> {
       tenantsById.set(DEMO_TENANT_ID, { id: DEMO_TENANT_ID, name: DEMO_TENANT_NAME, district: "Mbarara" });
       tenantsByName.set(DEMO_TENANT_NAME, tenantsById.get(DEMO_TENANT_ID)!);
       await hydrateCache(DEMO_TENANT_ID);
+      await syncDoctorDirectory();
       // Hydrate audit log (most recent 1000)
       const auditRows = await db.select().from(authAuditLogTable).limit(1000);
       for (const r of auditRows) auditLog.push(rowToAudit(r));
@@ -342,8 +416,13 @@ export function addUser(user: StoredUser): void {
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
     });
-    pendingUserWrites.set(user.id, persistence);
-    fireAndForget("addUser", persistence.finally(() => pendingUserWrites.delete(user.id)));
+    // Drizzle query builders are thenable. Calling `.finally()` directly on
+    // the builder creates a second execution when the original builder is
+    // also awaited by a dependent profile write. Materialize one Promise and
+    // share it between the background writer and waitForUserPersistence.
+    const persistencePromise = persistence.then(() => undefined);
+    pendingUserWrites.set(user.id, persistencePromise);
+    fireAndForget("addUser", persistencePromise.finally(() => pendingUserWrites.delete(user.id)));
   }
 }
 
@@ -372,7 +451,7 @@ export function createSession(session: Omit<StoredSession, "id" | "createdAt" | 
   sessionsByUser.get(session.userId)!.add(stored.id);
 
   if (dbAvailable) {
-    fireAndForget("createSession", db.insert(sessionsTable).values({
+    const sessionInsert = db.insert(sessionsTable).values({
       id: stored.id,
       userId: stored.userId,
       tenantId: stored.tenantId,
@@ -386,7 +465,14 @@ export function createSession(session: Omit<StoredSession, "id" | "createdAt" | 
       revokedAt: stored.revokedAt,
       createdAt: stored.createdAt,
       lastUsedAt: stored.lastUsedAt,
-    }));
+    });
+    // Registration returns a session immediately, while addUser persists in
+    // the background. Wait for that user row before inserting the FK child.
+    const userWrite = pendingUserWrites.get(stored.userId);
+    fireAndForget(
+      "createSession",
+      userWrite ? userWrite.then(() => sessionInsert) : sessionInsert,
+    );
   }
 
   return stored;

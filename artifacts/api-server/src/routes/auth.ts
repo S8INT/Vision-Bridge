@@ -31,6 +31,7 @@ import {
   touchSession,
   getAuditLog,
   getDemoTenantId,
+  ensureDoctorDirectoryEntry,
 } from "../lib/authStore.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { requireRole } from "../middlewares/rbac.js";
@@ -141,6 +142,9 @@ router.post("/register", async (req: Request, res: Response) => {
   };
 
   addUser(newUser);
+  void ensureDoctorDirectoryEntry(newUser).catch((err) => {
+    console.error("[auth] doctor directory provisioning failed:", err);
+  });
 
   const deviceId = getDeviceId(req);
 
@@ -671,6 +675,9 @@ router.post(
     };
 
     addUser(newUser);
+    void ensureDoctorDirectoryEntry(newUser).catch((err) => {
+      console.error("[auth] doctor directory provisioning failed:", err);
+    });
 
     audit(req, {
       userId: req.auth!.sub,
@@ -771,6 +778,11 @@ router.patch(
     }
 
     const updated = updateUser(userId!, patch);
+    if (updated?.role === "Doctor") {
+      void ensureDoctorDirectoryEntry(updated).catch((err) => {
+        console.error("[auth] doctor directory sync failed:", err);
+      });
+    }
 
     audit(req, {
       userId: req.auth!.sub,

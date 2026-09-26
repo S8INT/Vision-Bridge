@@ -20,7 +20,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, and, inArray, or, ne } from "drizzle-orm";
 import {
   db, patientsTable, doctorsTable, screeningsTable, consultationsTable,
-  referralsTable, appointmentsTable, campaignsTable, notificationsTable,
+  referralsTable, appointmentsTable, campaignsTable, notificationsTable, usersTable,
   routingDecisionsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
@@ -28,6 +28,7 @@ import { handleServerError, requireAuthContext, requireDb } from "../lib/http.js
 import { notifyDoctorOfAssignment, notifyUserInBackground } from "../lib/notify.js";
 import { routeConsultation } from "../lib/routing.js";
 import { canViewConsultationQueue, scopePatientRows } from "../lib/clinicalAccess.js";
+import { ensureDoctorDirectoryEntry } from "../lib/authStore.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -262,7 +263,13 @@ router.get("/ophthalmologists", async (req: Request, res: Response) => {
   const auth = requireAuthContext(req, res);
   if (!auth || !requireDb(res)) return;
   try {
-    const rows = await db!.select().from(doctorsTable).where(eq(doctorsTable.isAvailable, true));
+    const doctorUsers = await db!.select({ id: usersTable.id }).from(usersTable).where(and(
+      eq(usersTable.role, "Doctor"),
+      eq(usersTable.isActive, true),
+    ));
+    const doctorUserIds = new Set(doctorUsers.map((user) => user.id));
+    const rows = (await db!.select().from(doctorsTable).where(eq(doctorsTable.isAvailable, true)))
+      .filter((doctor) => doctor.userId && doctorUserIds.has(doctor.userId));
     res.json({ items: rows });
   } catch (err) {
     handleServerError(res, "clinical", err, "Failed to load available doctors");
@@ -296,7 +303,28 @@ router.post("/patient-consult", async (req: Request, res: Response) => {
       .from(consultationsTable)
       .where(and(eq(consultationsTable.patientId, patient.id), ne(consultationsTable.status, "Cancelled")));
     const continuityDoctorId = prior.find((row) => row.assignedDoctorId)?.assignedDoctorId ?? undefined;
-    const doctors = await db!.select().from(doctorsTable).where(eq(doctorsTable.tenantId, patient.tenantId));
+    // Repair legacy accounts created before doctor-directory provisioning was
+    // added, then only route to active users whose auth role is Doctor.
+    const doctorUsers = await db!.select().from(usersTable).where(and(
+      eq(usersTable.tenantId, patient.tenantId),
+      eq(usersTable.role, "Doctor"),
+      eq(usersTable.isActive, true),
+    ));
+    for (const doctorUser of doctorUsers) {
+      await ensureDoctorDirectoryEntry({
+        id: doctorUser.id,
+        tenantId: doctorUser.tenantId,
+        role: doctorUser.role,
+        fullName: doctorUser.fullName,
+        facility: doctorUser.facility ?? "",
+        district: doctorUser.district ?? "",
+        phone: doctorUser.phone,
+        isActive: doctorUser.isActive,
+      });
+    }
+    const doctorUserIds = new Set(doctorUsers.map((user) => user.id));
+    const doctors = (await db!.select().from(doctorsTable).where(eq(doctorsTable.tenantId, patient.tenantId)))
+      .filter((doctor) => doctor.userId && doctorUserIds.has(doctor.userId));
     const openCases = await db!.select({
       assignedDoctorId: consultationsTable.assignedDoctorId,
     }).from(consultationsTable).where(and(

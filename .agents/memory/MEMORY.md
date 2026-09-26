@@ -3,3 +3,4 @@
 - [Navigation presentation](navigation-presentation.md) — use the shared custom tab bar for complete mobile labels; native tab labels can ellipsize in narrow previews.
 - [Role-scoped clinical data](role-scoped-clinical-data.md) — role-aware navigation must be paired with server bootstrap/query scoping so patient accounts never hydrate tenant-wide consultation data.
 - [Imaging connectivity probe](imaging-connectivity-probe.md) — upload connectivity must use the API's mounted health endpoint or online captures are misclassified as offline.
+- [Doctor routing integrity](doctor-routing-integrity.md) — automatic consultation routing requires a Doctor-linked directory row and recipient-scoped notifications.

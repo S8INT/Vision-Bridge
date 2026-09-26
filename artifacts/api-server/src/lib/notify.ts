@@ -43,6 +43,7 @@ export async function notifyUser(options: NotifyOptions): Promise<void> {
       body,
       read: false,
       createdAt: new Date(),
+      userId: recipientUserId ?? null,
       patientId: patientId ?? null,
       consultationId: consultationId ?? null,
     });
