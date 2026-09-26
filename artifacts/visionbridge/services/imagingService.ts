@@ -535,7 +535,7 @@ async function checkConnectivity(): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
-    const resp = await fetch(`${API_BASE}/health`, { signal: controller.signal });
+    const resp = await fetch(`${API_BASE}/healthz`, { signal: controller.signal });
     clearTimeout(timeout);
     return resp.ok;
   } catch {
@@ -583,6 +583,14 @@ export class QualityCheckError extends Error {
 // In-flight lock: prevents the same queue item from being uploaded twice
 // concurrently (e.g. "Retry all" running while the user taps a single Retry).
 const inFlightRetries = new Set<string>();
+let imageQueueProcessPromise: Promise<ImageQueueProcessResult> | null = null;
+
+export interface ImageQueueProcessResult {
+  processed: number;
+  succeeded: number;
+  failed: number;
+  stoppedOffline: boolean;
+}
 
 /**
  * Retry a single queued item — immediately uploads it to the server.
@@ -670,6 +678,64 @@ export async function retryQueueItem(
   } finally {
     inFlightRetries.delete(queueId);
   }
+}
+
+/**
+ * Process queued image uploads after a successful connectivity check.
+ *
+ * The module-level promise prevents a foreground refresh and a manual
+ * background retry from uploading the same queue at the same time. Items are
+ * re-read before each attempt so a manual retry that wins a race is skipped.
+ * If connectivity drops during processing, stop without spending the
+ * remaining retry budget on requests that cannot reach the server.
+ */
+export function processOfflineImageQueue(): Promise<ImageQueueProcessResult> {
+  if (imageQueueProcessPromise) return imageQueueProcessPromise;
+
+  imageQueueProcessPromise = (async () => {
+    if (!(await checkConnectivity())) {
+      return { processed: 0, succeeded: 0, failed: 0, stoppedOffline: true };
+    }
+
+    const pending = await offlineQueue.getPending();
+    let succeeded = 0;
+    let failed = 0;
+    let processed = 0;
+    let stoppedOffline = false;
+
+    for (const queuedItem of pending) {
+      const current = (await offlineQueue.getAll()).find(
+        (item) => item.queueId === queuedItem.queueId,
+      );
+      if (
+        !current ||
+        current.status === "uploaded" ||
+        current.status === "uploading" ||
+        inFlightRetries.has(current.queueId)
+      ) {
+        continue;
+      }
+
+      processed++;
+      try {
+        await retryQueueItem(current.queueId);
+        succeeded++;
+      } catch (err: any) {
+        const message = err?.message ?? "Upload failed";
+        if (/Device is offline|Network request failed|Failed to fetch|AbortError/i.test(message)) {
+          stoppedOffline = true;
+          break;
+        }
+        failed++;
+      }
+    }
+
+    return { processed, succeeded, failed, stoppedOffline };
+  })().finally(() => {
+    imageQueueProcessPromise = null;
+  });
+
+  return imageQueueProcessPromise;
 }
 
 export type { QueueItem };

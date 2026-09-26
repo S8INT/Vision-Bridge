@@ -12,6 +12,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./AuthContext";
 import clinicalQueue from "@/services/clinicalQueue";
+import { processOfflineImageQueue } from "@/services/imagingService";
 import { fetchWithTimeout } from "../lib/fetchWithTimeout";
 
 // ── Public types (kept stable so existing screens compile unchanged) ───────
@@ -351,6 +352,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setIsOnline(true);
       setLastSyncAt(new Date().toISOString());
       setLastSyncError(null);
+      void processOfflineImageQueue().then((result) => {
+        if (result.processed > 0) {
+          console.info(
+            `[processOfflineImageQueue] processed=${result.processed} succeeded=${result.succeeded} failed=${result.failed}`,
+          );
+        }
+      });
     } catch (e) {
       const msg = (e as Error).message ?? "Unknown error";
       console.warn("[AppContext] bootstrap failed:", msg);
