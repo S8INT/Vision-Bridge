@@ -5,6 +5,7 @@ import {
   canViewConsultationQueue,
   scopePatientRows,
 } from "../src/lib/clinicalAccess.ts";
+import { routeConsultation } from "../src/lib/routing.ts";
 import navigationModule from "../../visionbridge/lib/navConfig.ts";
 
 const navigation = navigationModule as typeof import("../../visionbridge/lib/navConfig.ts");
@@ -16,6 +17,25 @@ type ConsultationRow = {
 
 const patientA = { id: "patient-a", patientId: "patient-a" };
 const patientB = { id: "patient-b", patientId: "patient-b" };
+const routingPatient = {
+  district: "Central",
+  medicalHistory: [],
+};
+
+function routingDoctor(id: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    name: `Doctor ${id}`,
+    specialty: "Retina",
+    capabilities: ["Retina"],
+    district: "Central",
+    isAvailable: true,
+    blockedUntil: null,
+    maxConcurrentCases: 20,
+    totalAssigned: 0,
+    ...overrides,
+  };
+}
 
 test("patient bootstrap consultation records stay scoped to the authenticated patient", () => {
   const bootstrapConsultations: ConsultationRow[] = [
@@ -77,4 +97,49 @@ test("navigation catalog keeps consultation destinations role-scoped", () => {
   assert.ok(!patientRoutes.includes("consultations"));
   assert.ok(staffRoutes.includes("consultations"));
   assert.ok(!staffRoutes.includes("my-consultations"));
+});
+
+test("a patient's available specialist choice overrides algorithm scoring", () => {
+  const preferredId = "doctor-preferred";
+  const result = routeConsultation({
+    consultation: {
+      consultationType: "NEW_PATIENT",
+      clinicalNotes: "Retina review",
+      priority: "Routine",
+      preferredDoctorId: preferredId,
+    },
+    patient: routingPatient as never,
+    doctors: [
+      routingDoctor("doctor-algorithm", { district: "Central" }),
+      routingDoctor(preferredId, { district: "Remote" }),
+    ] as never,
+    openCasesByDoctor: new Map([
+      ["doctor-algorithm", 0],
+      [preferredId, 10],
+    ]),
+  });
+
+  assert.equal(result.selected?.doctor.id, preferredId);
+  assert.match(result.reason, /Patient-selected ophthalmologist/);
+});
+
+test("a chosen unavailable specialist is not silently replaced", () => {
+  const preferredId = "doctor-unavailable";
+  const result = routeConsultation({
+    consultation: {
+      consultationType: "NEW_PATIENT",
+      clinicalNotes: "Retina review",
+      priority: "Routine",
+      preferredDoctorId: preferredId,
+    },
+    patient: routingPatient as never,
+    doctors: [
+      routingDoctor("doctor-algorithm"),
+      routingDoctor(preferredId, { isAvailable: false }),
+    ] as never,
+    openCasesByDoctor: new Map(),
+  });
+
+  assert.equal(result.selected, null);
+  assert.match(result.reason, /selected ophthalmologist is not currently available/i);
 });

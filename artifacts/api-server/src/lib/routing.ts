@@ -74,15 +74,23 @@ export function routeConsultation(args: {
   const priority = (args.consultation.priority ?? "Routine") as RoutingPriority;
   const specialty = determineSpecialty(args.consultation, args.patient, args.screening);
   const now = Date.now();
-  const eligible = args.doctors.filter((doctor) => {
+  const preferredDoctor = args.consultation.preferredDoctorId
+    ? args.doctors.find((doctor) => doctor.id === args.consultation.preferredDoctorId)
+    : undefined;
+
+  const canAcceptCase = (doctor: Doctor) => {
     const open = args.openCasesByDoctor.get(doctor.id) ?? 0;
     return doctor.isAvailable
       && (!doctor.blockedUntil || new Date(doctor.blockedUntil).getTime() <= now)
-      && open < (doctor.maxConcurrentCases ?? 20)
+      && open < (doctor.maxConcurrentCases ?? 20);
+  };
+
+  const eligible = args.doctors.filter((doctor) => {
+    return canAcceptCase(doctor)
       && specialtyScore(doctor, specialty) > 0;
   });
 
-  const candidates = eligible.map((doctor) => {
+  const scoredCandidates = eligible.map((doctor) => {
     const match = specialtyScore(doctor, specialty);
     const available = priority === "Emergency" ? 1 : doctor.isAvailable ? 1 : 0;
     const continuity = args.continuityDoctorId === doctor.id ? 1 : 0;
@@ -105,16 +113,39 @@ export function routeConsultation(args: {
       ...(preference ? ["Patient preference considered"] : []),
     ];
     return { doctor, score, reasons };
-  }).sort((a, b) => b.score - a.score);
+  });
+
+  // A patient-selected specialist is not a scoring preference. If that
+  // doctor is currently available and has capacity, assign directly even
+  // when another doctor has a stronger specialty/workload score.
+  const preferredCandidate = preferredDoctor && canAcceptCase(preferredDoctor)
+    ? {
+        doctor: preferredDoctor,
+        score: 100,
+        reasons: ["Patient-selected ophthalmologist", "Currently available"],
+      }
+    : null;
+
+  const candidates = [
+    ...(preferredCandidate ? [preferredCandidate] : []),
+    ...scoredCandidates.filter((candidate) => candidate.doctor.id !== preferredDoctor?.id),
+  ].sort((a, b) => b.score - a.score);
 
   // Preserve the old fairness behavior only for genuinely equivalent leaders.
   const topScore = candidates[0]?.score;
   const tied = topScore === undefined ? [] : candidates.filter((candidate) => candidate.score === topScore);
-  const selected = tied.length
+  const selected = preferredCandidate
+    ?? (args.consultation.preferredDoctorId
+      ? null
+      : tied.length
     ? tied[Math.floor(Math.random() * tied.length)]
-    : null;
+    : null);
   const reason = selected
     ? selected.reasons.join(" · ")
-    : `No eligible ${specialty} specialist is currently available`;
+    : args.consultation.preferredDoctorId
+      ? preferredDoctor
+        ? `The selected ophthalmologist is not currently available; the request is waiting for that specialist`
+        : "The selected ophthalmologist could not be found in this care network; the request is waiting for manual assignment"
+      : `No eligible ${specialty} specialist is currently available`;
   return { specialty, priority, candidates, selected, fallbackQueue: selected ? null : specialty, reason };
 }

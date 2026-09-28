@@ -305,17 +305,25 @@ router.get("/my-consultations", async (req: Request, res: Response) => {
   }
 });
 
-// ── Ophthalmologists: all available doctors across all tenants (patient-facing) ──
+// ── Ophthalmologists: available doctors in the patient's care network ────────
 router.get("/ophthalmologists", async (req: Request, res: Response) => {
   const auth = requireAuthContext(req, res);
   if (!auth || !requireDb(res)) return;
   try {
+    const patientRows = await db!.select({ tenantId: patientsTable.tenantId })
+      .from(patientsTable)
+      .where(eq(patientsTable.userId, auth.sub))
+      .limit(1);
+    const patientTenantId = patientRows[0]?.tenantId ?? auth.tenantId;
     const doctorUsers = await db!.select({ id: usersTable.id }).from(usersTable).where(and(
       eq(usersTable.role, "Doctor"),
       eq(usersTable.isActive, true),
     ));
     const doctorUserIds = new Set(doctorUsers.map((user) => user.id));
-    const rows = (await db!.select().from(doctorsTable).where(eq(doctorsTable.isAvailable, true)))
+    const rows = (await db!.select().from(doctorsTable).where(and(
+      eq(doctorsTable.tenantId, patientTenantId),
+      eq(doctorsTable.isAvailable, true),
+    )))
       .filter((doctor) => doctor.userId && doctorUserIds.has(doctor.userId));
     res.json({ items: rows });
   } catch (err) {

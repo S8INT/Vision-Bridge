@@ -7,4 +7,4 @@ Doctor auth accounts and the operational doctor directory are separate records. 
 
 **Why:** Accounts can be created successfully without a directory row; unlinked rows produce pending consultations, and notifications without `userId` do not appear in the intended Doctor's inbox.
 
-**How to apply:** Preserve the auth-to-directory backfill and role filter whenever changing signup, user administration, doctor availability, consultation routing, or clinical notification fan-out.
+**How to apply:** Preserve the auth-to-directory backfill and role filter whenever changing signup, user administration, doctor availability, consultation routing, or clinical notification fan-out. Treat a patient-selected available Doctor as an explicit assignment, not a weighted preference; only run algorithmic selection when no Doctor was chosen.

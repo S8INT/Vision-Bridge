@@ -208,6 +208,7 @@ export default function ConsultRequestScreen() {
         `Your consultation request has been received.\n\n` +
         `Patient ID: ${myPatient.patientId}\n` +
         (assigned ? `${assigned.name} (${assigned.specialty}) will review your case.\n\n` : "") +
+        (!assigned && data.routing?.message ? `${data.routing.message}.\n\n` : "") +
         `You will be notified when a specialist responds.`,
         [{ text: "OK", onPress: () => router.replace("/(tabs)") }],
       );
