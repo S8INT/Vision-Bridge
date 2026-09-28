@@ -109,15 +109,23 @@ export default function PatientDetailScreen() {
       return;
     }
     setSavingPlan(true);
-    await updateConsultation(activeConsultation.id, {
-      diagnosis: diagnosis.trim() || undefined,
-      treatment: treatment.trim() || undefined,
-      followUpDate: followUpDate.trim() ? new Date(`${followUpDate.trim()}T09:00:00`).toISOString() : undefined,
-      clinicalNotes: clinicalNote.trim() || undefined,
-      status: activeConsultation.status === "Assigned" || activeConsultation.status === "InReview" ? "Reviewed" : activeConsultation.status,
-    });
-    setSavingPlan(false);
-    Alert.alert("Care plan saved", "The diagnosis, treatment plan, follow-up and note were saved to the assigned consultation.");
+    try {
+      await updateConsultation(activeConsultation.id, {
+        diagnosis: diagnosis.trim() || undefined,
+        diagnosisOverride: diagnosis.trim() || undefined,
+        treatment: treatment.trim() || undefined,
+        treatmentPlan: treatment.trim() || undefined,
+        followUpDate: followUpDate.trim() ? new Date(`${followUpDate.trim()}T09:00:00`).toISOString() : undefined,
+        clinicalNotes: clinicalNote.trim() || undefined,
+        status: activeConsultation.status === "Assigned" || activeConsultation.status === "InReview" ? "Reviewed" : activeConsultation.status,
+      });
+      Alert.alert("Care plan saved", "The diagnosis, treatment plan, follow-up and note were saved to the assigned consultation.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The care plan could not be saved.";
+      Alert.alert("Save failed", message);
+    } finally {
+      setSavingPlan(false);
+    }
   }
 
   return (

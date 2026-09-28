@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
@@ -23,8 +23,14 @@ const RISK_COLOR: Record<string, string> = {
 export default function ReportsScreen() {
   const colors = useColors();
   const r = useResponsive();
-  const { patients, screenings, consultations } = useApp();
+  const { patients, screenings, consultations, refresh } = useApp();
   const { user } = useAuth();
+
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
 
   const myPatient = useMemo(
     () => patients.find((p) => `${p.firstName} ${p.lastName}` === user?.fullName),

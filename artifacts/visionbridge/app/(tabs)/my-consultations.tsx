@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useScreenPadding } from "@/hooks/useScreenPadding";
@@ -278,6 +278,12 @@ export default function MyConsultationsScreen() {
   }, [accessToken, isPatient]);
 
   useEffect(() => { fetchMyConsultations(true); }, [fetchMyConsultations]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isPatient) void fetchMyConsultations(false);
+    }, [fetchMyConsultations, isPatient]),
+  );
 
   useEffect(() => {
     if (!user || isPatient) return;

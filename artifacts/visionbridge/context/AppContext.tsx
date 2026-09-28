@@ -456,7 +456,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const { item } = await authedFetch(`/clinical/consultations/${id}`, { method: "PATCH", body: JSON.stringify(updates) });
       const row = normaliseRow(item) as Consultation;
       setConsultations((prev) => prev.map((x) => (x.id === id ? row : x)));
-    } catch (e) { console.warn("[updateConsultation]", (e as Error).message); }
+    } catch (e) {
+      console.warn("[updateConsultation]", (e as Error).message);
+      throw e;
+    }
   }, [authedFetch]);
 
   const assignConsultation = useCallback(async (id: string, doctorId: string, method: "RoundRobin" | "Manual") => {

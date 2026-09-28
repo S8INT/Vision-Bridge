@@ -209,52 +209,70 @@ export default function ConsultationDetailScreen() {
   ];
 
   async function handleRoundRobinAssign() {
-    const doc = await assignRoundRobin(activeConsultation.id);
-    if (!doc) {
-      Alert.alert("No Available Doctors", "All specialists are currently unavailable. Please assign manually.");
-      return;
+    try {
+      const doc = await assignRoundRobin(activeConsultation.id);
+      if (!doc) {
+        Alert.alert("No Available Doctors", "All specialists are currently unavailable. Please assign manually.");
+        return;
+      }
+      addNotification({ type: "ConsultationUpdate", title: "Case Auto-Assigned", body: `${patient?.firstName} ${patient?.lastName}'s case assigned to ${doc.name} (round-robin)`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Assigned", `Case assigned to ${doc.name} via round-robin.`);
+      setShowAssignForm(false);
+    } catch {
+      Alert.alert("Assignment failed", "The consultation could not be assigned. Please try again.");
     }
-    addNotification({ type: "ConsultationUpdate", title: "Case Auto-Assigned", body: `${patient?.firstName} ${patient?.lastName}'s case assigned to ${doc.name} (round-robin)`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert("Assigned", `Case assigned to ${doc.name} via round-robin.`);
-    setShowAssignForm(false);
   }
 
-  function handleManualAssign() {
+  async function handleManualAssign() {
     if (!selectedDoctorId) { Alert.alert("Select a Doctor", "Please select a specialist to assign."); return; }
-    assignConsultation(activeConsultation.id, selectedDoctorId, "Manual");
-    const doc = doctors.find((d) => d.id === selectedDoctorId);
-    addNotification({ type: "ConsultationUpdate", title: "Case Manually Assigned", body: `${patient?.firstName} ${patient?.lastName}'s case assigned to ${doc?.name}`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setShowAssignForm(false);
+    try {
+      await assignConsultation(activeConsultation.id, selectedDoctorId, "Manual");
+      const doc = doctors.find((d) => d.id === selectedDoctorId);
+      addNotification({ type: "ConsultationUpdate", title: "Case Manually Assigned", body: `${patient?.firstName} ${patient?.lastName}'s case assigned to ${doc?.name}`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowAssignForm(false);
+    } catch {
+      Alert.alert("Assignment failed", "The consultation could not be assigned. Please try again.");
+    }
   }
 
-  function handleSubmitResponse() {
+  async function handleSubmitResponse() {
     if (!response.trim()) { Alert.alert("Response Required", "Enter your clinical response."); return; }
-    updateConsultation(activeConsultation.id, {
-      status: "Reviewed",
-      specialistResponse: response.trim(),
-      diagnosisOverride: diagnosisOverride.trim() || undefined,
-      treatmentPlan: treatmentPlan.trim() || undefined,
-      diagnosis: diagnosisOverride.trim() || undefined,
-      treatment: treatmentPlan.trim() || undefined,
-      respondedAt: new Date().toISOString(),
-      assignedTo: currentUser.name,
-    });
-    addNotification({ type: "ConsultationUpdate", title: "Specialist Response Submitted", body: `${patient?.firstName} ${patient?.lastName}'s case has been reviewed`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setShowResponseForm(false);
-    Alert.alert("Response Saved", "The referring clinician has been notified.");
+    try {
+      await updateConsultation(activeConsultation.id, {
+        status: "Reviewed",
+        specialistResponse: response.trim(),
+        diagnosisOverride: diagnosisOverride.trim() || undefined,
+        treatmentPlan: treatmentPlan.trim() || undefined,
+        diagnosis: diagnosisOverride.trim() || undefined,
+        treatment: treatmentPlan.trim() || undefined,
+        respondedAt: new Date().toISOString(),
+        assignedTo: currentUser.name,
+      });
+      addNotification({ type: "ConsultationUpdate", title: "Specialist Response Submitted", body: `${patient?.firstName} ${patient?.lastName}'s case has been reviewed`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowResponseForm(false);
+      Alert.alert("Response Saved", "The referring clinician has been notified.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The response could not be saved.";
+      Alert.alert("Save failed", message);
+    }
   }
 
-  function handleSaveCareCoord() {
-    updateConsultation(activeConsultation.id, {
-      careCoordinatorNotes: careNotes.trim() || undefined,
-      followUpDate: followUpDate ? `${followUpDate}T09:00:00Z` : undefined,
-    });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setShowCareCoordForm(false);
-    Alert.alert("Care Plan Updated", "Coordination notes and follow-up date saved.");
+  async function handleSaveCareCoord() {
+    try {
+      await updateConsultation(activeConsultation.id, {
+        careCoordinatorNotes: careNotes.trim() || undefined,
+        followUpDate: followUpDate ? `${followUpDate}T09:00:00Z` : undefined,
+      });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setShowCareCoordForm(false);
+      Alert.alert("Care Plan Updated", "Coordination notes and follow-up date saved.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The care plan could not be saved.";
+      Alert.alert("Save failed", message);
+    }
   }
 
   function handleMarkCompleted() {
@@ -262,10 +280,15 @@ export default function ConsultationDetailScreen() {
       { text: "Cancel", style: "cancel" },
       {
         text: "Complete",
-        onPress: () => {
-          updateConsultation(activeConsultation.id, { status: "Completed" });
-          addNotification({ type: "ConsultationUpdate", title: "Consultation Completed", body: `${patient?.firstName} ${patient?.lastName}'s care episode marked complete`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onPress: async () => {
+          try {
+            await updateConsultation(activeConsultation.id, { status: "Completed" });
+            addNotification({ type: "ConsultationUpdate", title: "Consultation Completed", body: `${patient?.firstName} ${patient?.lastName}'s care episode marked complete`, patientId: activeConsultation.patientId, consultationId: activeConsultation.id });
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "The consultation could not be completed.";
+            Alert.alert("Update failed", message);
+          }
         },
       },
     ]);

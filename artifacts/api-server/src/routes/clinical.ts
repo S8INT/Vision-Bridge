@@ -18,6 +18,7 @@
 
 import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, and, inArray, or, ne } from "drizzle-orm";
+import { z } from "zod";
 import {
   db, patientsTable, doctorsTable, screeningsTable, consultationsTable,
   referralsTable, appointmentsTable, campaignsTable, notificationsTable, usersTable,
@@ -178,6 +179,52 @@ const SCREENING_STATUSES    = ["Pending", "Screened", "Reviewed", "Referred"] as
 const REFERRAL_STATUSES     = ["Pending", "Accepted", "InTransit", "Arrived", "Completed", "Declined"] as const;
 const APPOINTMENT_STATUSES  = ["Requested", "Confirmed", "Completed", "Cancelled", "NoShow"] as const;
 const CAMPAIGN_STATUSES     = ["Planned", "Active", "Completed", "Cancelled"] as const;
+
+const consultationDate = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined || value instanceof Date) return value;
+    if (typeof value === "string" && value.trim()) {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? value : parsed;
+    }
+    return value;
+  },
+  z.date().nullable().optional(),
+);
+
+/**
+ * Mobile clients send ISO strings, while Drizzle timestamp columns require
+ * Date instances. Keep the update contract explicit so a malformed or
+ * client-owned field cannot abort an otherwise valid care-plan save.
+ */
+const consultationPatchSchema = z.object({
+  assignedTo: z.string().nullable().optional(),
+  assignedDoctorId: z.string().uuid().nullable().optional(),
+  assignedAt: consultationDate,
+  assignmentMethod: z.enum(["Intelligent", "RoundRobin", "Manual"]).nullable().optional(),
+  status: z.enum(CONSULTATION_STATUSES).optional(),
+  priority: z.enum(["Routine", "High", "Urgent", "Emergency"]).optional(),
+  consultationType: z.enum(["NEW_PATIENT", "SPECIALIST_REFERRAL", "FOLLOW_UP", "SECOND_OPINION", "REMOTE_IMAGE_REVIEW", "EMERGENCY"]).optional(),
+  specialty: z.string().nullable().optional(),
+  preferredDoctorId: z.string().uuid().nullable().optional(),
+  routingStatus: z.enum(["ROUTING", "ASSIGNED", "SPECIALTY_QUEUE", "ESCALATED"]).optional(),
+  routingReason: z.string().nullable().optional(),
+  routingScore: z.number().int().nullable().optional(),
+  acknowledgementDueAt: consultationDate,
+  acknowledgedAt: consultationDate,
+  clinicalNotes: z.string().nullable().optional(),
+  diagnosisOverride: z.string().nullable().optional(),
+  treatmentPlan: z.string().nullable().optional(),
+  specialistResponse: z.string().nullable().optional(),
+  respondedAt: consultationDate,
+  diagnosis: z.string().nullable().optional(),
+  treatment: z.string().nullable().optional(),
+  referralId: z.string().uuid().nullable().optional(),
+  appointmentId: z.string().uuid().nullable().optional(),
+  followUpDate: consultationDate,
+  careCoordinatorNotes: z.string().nullable().optional(),
+  campaignId: z.string().uuid().nullable().optional(),
+}).strict();
 
 /**
  * If the request body contains a `status` field, verify it is one of the
@@ -514,6 +561,21 @@ router.patch("/consultations/:id", async (req: Request, res: Response) => {
     return;
   }
   if (!validateStatus(req, res, CONSULTATION_STATUSES)) return;
+  const parsedPatch = consultationPatchSchema.safeParse(req.body ?? {});
+  if (!parsedPatch.success) {
+    res.status(400).json({
+      error: "Invalid consultation update",
+      issues: parsedPatch.error.issues,
+    });
+    return;
+  }
+  const patch = Object.fromEntries(
+    Object.entries(parsedPatch.data).filter(([, value]) => value !== undefined),
+  ) as Partial<typeof consultationsTable.$inferInsert>;
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: "At least one consultation field is required" });
+    return;
+  }
   const id = String(req.params["id"] ?? "");
   try {
       const [existing] = await db!.select().from(consultationsTable)
@@ -533,14 +595,14 @@ router.patch("/consultations/:id", async (req: Request, res: Response) => {
         }
       }
 
-      const [row] = await db!.update(consultationsTable).set(req.body).where(
+      const [row] = await db!.update(consultationsTable).set(patch).where(
         and(eq(consultationsTable.id, id), eq(consultationsTable.tenantId, req.auth.tenantId)),
       ).returning();
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
     res.json({ item: row });
 
     // ── Fire push to doctor when a consultation is manually assigned ─────────
-    if (req.body.assignedDoctorId && row.assignedDoctorId) {
+    if (patch.assignedDoctorId && row.assignedDoctorId) {
       (async () => {
         try {
           const doctorRows = await db!.select().from(doctorsTable)
@@ -571,9 +633,9 @@ router.patch("/consultations/:id", async (req: Request, res: Response) => {
 
     // ── Fire push notification to patient (best-effort, non-blocking) ──
     const triggersNotification =
-      req.body.specialistResponse ||
-      req.body.status === "Reviewed" ||
-      req.body.status === "Completed";
+      patch.specialistResponse ||
+      patch.status === "Reviewed" ||
+      patch.status === "Completed";
 
     if (triggersNotification && row.patientId) {
       (async () => {
@@ -587,13 +649,13 @@ router.patch("/consultations/:id", async (req: Request, res: Response) => {
           let title = "Consultation Update";
           let body = "Your consultation status has been updated.";
 
-          if (req.body.specialistResponse) {
+          if (patch.specialistResponse) {
             title = "Specialist Response Received";
             body = "Your specialist has reviewed your case and left a response. Tap to read it.";
-          } else if (req.body.status === "Reviewed") {
+          } else if (patch.status === "Reviewed") {
             title = "Consultation Reviewed";
             body = "Your consultation has been reviewed by a specialist.";
-          } else if (req.body.status === "Completed") {
+          } else if (patch.status === "Completed") {
             title = "Consultation Completed";
             body = "Your consultation is now complete. Tap to view the outcome.";
           }

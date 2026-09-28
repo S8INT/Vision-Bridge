@@ -4,3 +4,4 @@
 - [Role-scoped clinical data](role-scoped-clinical-data.md) — role-aware navigation must be paired with server bootstrap/query scoping so patient accounts never hydrate tenant-wide consultation data.
 - [Imaging connectivity probe](imaging-connectivity-probe.md) — upload connectivity must use the API's mounted health endpoint or online captures are misclassified as offline.
 - [Doctor routing integrity](doctor-routing-integrity.md) — automatic consultation routing requires a Doctor-linked directory row and recipient-scoped notifications.
+- [Consultation care-plan persistence](consultation-care-plan-persistence.md) — normalize mobile ISO dates to Date values before Drizzle timestamp updates; surface failed saves to clinicians.

@@ -70,7 +70,7 @@ export default function BookAppointmentScreen() {
         coveredByInsurance: insurance,
       });
       if (consultationId) {
-        updateConsultation(consultationId, { appointmentId: appt.id });
+        await updateConsultation(consultationId, { appointmentId: appt.id });
       }
       addNotification({
         type: "AppointmentConfirmed",

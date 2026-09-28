@@ -76,7 +76,7 @@ export default function NewReferralScreen() {
         escortRequired,
         referralNotes: referralNotes.trim() || undefined,
       });
-      updateConsultation(consultationId, { referralId: ref.id, status: "Referred" });
+      await updateConsultation(consultationId, { referralId: ref.id, status: "Referred" });
       const scr = screenings.find((s) => s.id === consultation?.screeningId);
       if (scr) updateScreening(scr.id, { status: "Referred" });
       addNotification({
